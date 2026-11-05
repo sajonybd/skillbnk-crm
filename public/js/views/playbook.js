@@ -15,8 +15,8 @@ export async function render(root, ctx) {
 
   function draw() {
     const tab = (k, t) => h('button', { class: 'segb' + (state.tab === k ? ' on' : ''), onclick: () => { state.tab = k; draw(); } }, t);
-    tabs.replaceChildren(tab('plan', 'Marketing plan'), tab('rules', 'Rules & limits'), tab('requests', isAdmin ? `Requests${data.open_requests ? ` (${data.open_requests})` : ''}` : 'Ask the admin'));
-    ({ plan: drawPlan, rules: drawRules, requests: drawRequests })[state.tab]();
+    tabs.replaceChildren(tab('plan', 'Marketing plan'), tab('rules', 'Rules & limits'), tab('targets', 'Daily targets'), tab('requests', isAdmin ? `Requests${data.open_requests ? ` (${data.open_requests})` : ''}` : 'Ask the admin'));
+    ({ plan: drawPlan, rules: drawRules, targets: drawTargets, requests: drawRequests })[state.tab]();
   }
 
   // ── plan text ──
@@ -66,6 +66,35 @@ export async function render(root, ctx) {
       h('div', { class: 'card pcard', style: 'max-width:820px;margin-top:14px' }, h('div', { class: 'pc-title' }, h('h3', null, 'Daily lead actions per person')), ...capRows,
         h('div', { class: 'muted', style: 'margin-top:8px' }, 'Daily targets (comments, likes, DMs…) are on the Targets page. Team tasks are on the Tasks page.')),
       save ? h('div', { style: 'margin-top:12px' }, save) : h('div', { class: 'muted', style: 'margin-top:12px' }, 'Only the admin can change these. Use "Ask the admin" if a number should change.'));
+  }
+
+  // ── daily targets: team default (given to new members) and each person's own numbers ──
+  function drawTargets() {
+    const T = data.targets;
+    const metrics = Object.keys(T.metrics);
+    const mk = (val, ph) => { const i = h('input', { type: 'number', min: 0, max: 5000, value: val ?? '', placeholder: ph || '', style: 'width:78px' }); i.disabled = !isAdmin; return i; };
+    const defIn = Object.fromEntries(metrics.map((m) => [m, mk(T.defaults[m])]));
+    const memIn = T.members.map((u) => ({ u, in: Object.fromEntries(metrics.map((m) => [m, mk(u.targets[m] ?? 0)])) }));
+    const table = h('div', { style: 'overflow-x:auto' }, h('table', { class: 'tgt-edit' },
+      h('thead', null, h('tr', null, h('th', null, 'Daily target'), h('th', null, 'Team default'), ...memIn.map((x) => h('th', null, x.u.name)))),
+      h('tbody', null, ...metrics.map((m) => h('tr', null, h('td', null, T.metrics[m]), h('td', null, defIn[m]), ...memIn.map((x) => h('td', null, x.in[m])))))));
+    const save = async (applyAll) => {
+      try {
+        const members = {};
+        if (applyAll) for (const x of memIn) members[x.u.user_id] = Object.fromEntries(metrics.map((m) => [m, defIn[m].value]));
+        else for (const x of memIn) members[x.u.user_id] = Object.fromEntries(metrics.map((m) => [m, x.in[m].value]));
+        await api('PUT', '/api/playbook/targets', { defaults: Object.fromEntries(metrics.map((m) => [m, defIn[m].value])), members });
+        toast(applyAll ? 'Team default applied to everyone' : 'Targets saved'); reload();
+      } catch (e) { toast(e.message, true); }
+    };
+    body.replaceChildren(
+      h('div', { class: 'card pcard', style: 'max-width:980px' }, h('div', { class: 'pc-title' }, h('h3', null, 'Daily activity targets')),
+        h('div', { class: 'muted', style: 'margin-bottom:10px' }, 'Counted automatically from what each person logs. The team default is given to every new member. Per-person numbers can differ.'),
+        table),
+      isAdmin ? h('div', { class: 'row', style: 'margin-top:12px' },
+        h('button', { class: 'btn primary', onclick: () => save(false) }, 'Save targets'),
+        h('button', { class: 'btn', title: 'Overwrite everyone with the team default column', onclick: () => save(true) }, 'Apply team default to everyone'))
+        : h('div', { class: 'muted', style: 'margin-top:12px' }, 'Only the admin can change these. Use "Ask the admin" if a number should change.'));
   }
 
   // ── requests ──

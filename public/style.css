@@ -552,3 +552,10 @@ td:last-child { min-width: 200px; max-width: 240px; }
 }
 .rule { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid #f0f2f6; }
 .rule:last-child { border-bottom: 0; }
+
+/* profile review list */
+.revhead{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;justify-content:space-between;margin:6px 0 2px}
+.revrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 2px;border-top:1px solid var(--line, #e5e7ef);transition:opacity .4s}
+.revrow.gone{opacity:.25}
+.revrow .tier{margin-left:8px;font-size:11px;padding:1px 6px;border-radius:6px;background:#eef;}
+.tgt-edit th,.tgt-edit td{padding:6px 10px;text-align:left;white-space:nowrap}

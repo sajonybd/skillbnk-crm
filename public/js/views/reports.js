@@ -1,5 +1,5 @@
 import { api, qs } from '../api.js';
-import { h, fill, toast } from '../util.js';
+import { h, fill, toast, pref } from '../util.js';
 import { icon } from '../icons.js';
 
 // Reports built from the CRM: the daily plan, the end-of-day update and the weekly KPI report.
@@ -8,7 +8,7 @@ const TABS = [
   ['eod', 'End-of-day update', 'What was done: prospects, comments and messages sent, research verdicts'],
   ['weekly', 'Weekly KPI', 'Target vs actual for the week, pipeline and lead quality'],
 ];
-const state = { tab: 'eod', date: '', from: '', to: '', assignee: '' };
+const state = { tab: 'eod', date: '', from: '', to: '', assignee: '', _init: false };
 
 // Small, safe Markdown renderer: headings, lists, tables, quotes, bold.
 function inline(text) {
@@ -49,6 +49,7 @@ export function renderMd(md) {
 
 export async function render(root, ctx) {
   const isAdmin = ctx.user.role === 'admin';
+  if (!state._init) { state._init = true; state.assignee = pref.get(ctx.user.id, 'reports.assignee', ''); state.tab = pref.get(ctx.user.id, 'reports.tab', 'eod'); }
   const out = h('div');
   const bar = h('div', { class: 'rep-bar' });
   const tabs = h('div', { class: 'seg' });
@@ -64,6 +65,7 @@ export async function render(root, ctx) {
 
   async function load() {
     tabs.replaceChildren(...TABS.map(([k, t]) => h('button', { class: 'segb' + (state.tab === k ? ' on' : ''), onclick: () => { state.tab = k; state.date = ''; state.from = ''; state.to = ''; load(); } }, t)));
+    pref.set(ctx.user.id, 'reports.assignee', state.assignee); pref.set(ctx.user.id, 'reports.tab', state.tab);
     const who = state.assignee || (isAdmin ? 'all' : 'me');
     const mk = (v, t) => h('button', { class: 'chip noav' + (who === v ? ' on' : ''), onclick: () => { state.assignee = v; load(); } }, t);
     chips.replaceChildren(mk('me', 'Mine'), ...(isAdmin ? [mk('all', 'Whole team')] : []), ...ctx.users.filter((u) => u.active && u.id !== ctx.user.id && u.role !== 'admin').map((u) => mk(String(u.id), u.name)));

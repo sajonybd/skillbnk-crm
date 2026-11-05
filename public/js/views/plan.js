@@ -1,11 +1,11 @@
 import { api, qs } from '../api.js';
-import { h, fill, toast, avatar, asUrl } from '../util.js';
+import { h, fill, toast, avatar, asUrl, pref } from '../util.js';
 import { openLead } from './lead-drawer.js';
 import { icon } from '../icons.js';
 
 // The daily plan: what each person has to do (and exactly which action to take on each lead),
 // how leads are responding, and what was achieved. After 12:00 it opens on the next working day.
-const state = { day: '', assignee: '', view: 'queue' };
+const state = { day: '', assignee: '', view: 'queue', _init: false };
 const nice = (d) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'short' });
 
 const KIND_TONE = { reply: 'hot', first_message: 'hot', followup: 'warm', email: 'warm', check_invite: 'cool', scheduled: 'cool', no_email: 'muted', research: 'muted', last_followup: 'muted' };
@@ -26,6 +26,7 @@ const DONE_TEXT = { comment: 'Comment logged', sent: 'Logged as sent', accepted:
 
 export async function render(root, ctx) {
   const isAdmin = ctx.user.role === 'admin';
+  if (!state._init) { state._init = true; state.assignee = pref.get(ctx.user.id, 'plan.assignee', ''); state.view = pref.get(ctx.user.id, 'plan.view', 'queue'); }
   const body = h('div');
   const chips = h('div', { class: 'chips', style: 'margin-bottom:14px' });
   const tabs = h('div', { class: 'seg' });
@@ -35,6 +36,7 @@ export async function render(root, ctx) {
 
   async function load(keepScroll) {
     const y = window.scrollY;
+    pref.set(ctx.user.id, 'plan.assignee', state.assignee); pref.set(ctx.user.id, 'plan.view', state.view);
     try {
       const d = await api('GET', '/api/plan?' + qs({ day: state.day, assignee: state.assignee }));
       draw(d);
@@ -70,13 +72,38 @@ export async function render(root, ctx) {
           tile(tgtPct == null ? '–' : tgtPct + '%', 'daily target'),
           tile(m.responses.counts.replied, 'replies waiting', m.responses.counts.replied ? 'hot' : ''))),
       h('div', { class: 'plan-cols' },
-        h('div', { class: 'plan-main' }, viewTabs(m), state.view === 'stale' ? stalePile(m, true) : actions(m, d)),
+        h('div', { class: 'plan-main' }, viewTabs(m), state.view === 'stale' ? stalePile(m, true) : state.view === 'review' ? reviewList(m) : actions(m, d)),
         h('div', { class: 'plan-side' }, targets(m, d), tasks(m, d), responses(m), achieved(m))));
   }
 
   function viewTabs(m) {
     const b = (key, text) => h('button', { class: 'segb' + (state.view === key ? ' on' : ''), onclick: () => { state.view = key; load(true); } }, text);
-    return h('div', { class: 'seg', style: 'align-self:flex-start' }, b('queue', `Today's queue (${m.summary.actions})`), b('stale', `Stale: close or nurture (${m.summary.stale})`));
+    return h('div', { class: 'seg', style: 'align-self:flex-start' }, b('queue', `Today's queue (${m.summary.actions})`), b('review', 'Profile review list'), b('stale', `Stale: close or nurture (${m.summary.stale})`));
+  }
+
+  // ── profile review list: exactly which profiles to open to reach today's profile-review target ──
+  function reviewList(m) {
+    const box = h('div', { class: 'card pcard' }, h('div', { class: 'pc-title' }, icon('users', 16), h('h3', null, 'Profile review list'), h('span', { class: 'muted' }, 'untouched leads, best tier first')));
+    const list = h('div', null, h('div', { class: 'muted' }, 'Loading…'));
+    box.append(list);
+    api('GET', '/api/plan/review?' + qs({ assignee: String(m.user_id) })).then((r) => {
+      const head = h('div', { class: 'revhead' },
+        h('b', null, `${r.done} of ${r.target} profiles reviewed today`),
+        h('span', { class: 'muted' }, r.pool > r.rows.length ? `${r.pool.toLocaleString()} untouched leads in your pool, showing the next ${r.rows.length}` : `${r.rows.length} left in your pool`));
+      if (!r.rows.length) { fill(list, head, h('div', { class: 'empty' }, r.target && r.done >= r.target ? 'Target reached. Nice work.' : 'No untouched leads with a LinkedIn link. Ask the admin for more leads.')); return; }
+      const how = h('div', { class: 'muted', style: 'margin:6px 0 10px' }, 'Click Open profile. The view is logged for you and the lead drops off this list. Work top to bottom.');
+      const rowEl = (l) => {
+        const row = h('div', { class: 'revrow' },
+          h('div', { style: 'min-width:0' }, h('b', null, `${l.first_name} ${l.last_name}`.trim() || l.company), l.tier ? h('span', { class: 'tier t' + l.tier }, l.tier) : null,
+            h('div', { class: 'muted', style: 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, [l.title, l.company].filter(Boolean).join(' · '))),
+          h('a', { class: 'btn small primary', href: asUrl(l.linkedin), target: '_blank', rel: 'noopener', onclick: () => {
+            api('POST', `/api/leads/${l.id}/visit`, { kind: 'profile' }).then(() => { row.classList.add('gone'); setTimeout(() => load(true), 600); }).catch(() => {});
+          } }, 'Open profile ↗'));
+        return row;
+      };
+      fill(list, head, how, ...r.rows.map(rowEl));
+    }).catch((e) => fill(list, h('div', { class: 'empty' }, e.message)));
+    return box;
   }
 
   // ── lead actions ───────────────────────────────────────────────────────────

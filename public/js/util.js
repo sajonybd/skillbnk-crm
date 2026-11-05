@@ -144,3 +144,9 @@ export function drawPager(el, { page, limit, total, onPage }) {
       btn('›', cur + 1, { off: cur === pages, title: 'Next page' }), btn('»', pages, { off: cur === pages, title: 'Last page' })),
     h('div', { class: 'pg-go' }, h('span', { class: 'muted' }, `Page ${cur.toLocaleString()} of ${pages.toLocaleString()} · go to`), jump, goBtn));
 }
+
+// Remembers a choice (selected team member, tab, sort…) per signed-in user, so a reload keeps it.
+export const pref = {
+  get(uid, key, def = '') { try { const v = localStorage.getItem(`sbk:${uid}:${key}`); return v == null ? def : v; } catch { return def; } },
+  set(uid, key, val) { try { localStorage.setItem(`sbk:${uid}:${key}`, String(val ?? '')); } catch { /* private mode */ } },
+};

@@ -126,5 +126,23 @@ export function planRoutes(db) {
       skipped_friday: addDays(today, 1) !== tomorrow, daily_cap: getRules(db).daily_cap, stale_days: getRules(db).stale_days, members,
     });
   });
+
+  // The profile-review list: the exact leads a person should open today to reach the "profile reviews" target.
+  // Untouched leads they own, best tier first, oldest import first. Opening a profile logs the view and removes it.
+  r.get('/review', (req, res) => {
+    const today = todayLocal();
+    const a = req.query.assignee;
+    const uid = req.user.role === 'admin' && a && a !== 'me' && a !== 'all' ? Number(a) : req.user.id;
+    const target = db.prepare("SELECT daily_target FROM member_targets WHERE user_id = ? AND metric = 'linkedin_view'").get(uid)?.daily_target || 0;
+    const done = db.prepare(`SELECT COUNT(*) AS n FROM activities WHERE user_id = ? AND type = 'linkedin_view' AND date(created_at, '${shift}') = ?`).get(uid, today).n;
+    const left = Math.max(0, target - done);
+    const rows = db.prepare(
+      `SELECT id, first_name, last_name, title, company, linkedin, tier, state, source FROM leads
+       WHERE deleted_at = '' AND owner_id = ? AND last_activity_at = '' AND linkedin != ''
+       ORDER BY CASE tier WHEN 'A' THEN 0 WHEN 'B' THEN 1 WHEN 'C' THEN 2 ELSE 3 END, created_at ASC, id ASC LIMIT ?`
+    ).all(uid, Math.min(left || 100, 100));
+    const pool = db.prepare("SELECT COUNT(*) AS n FROM leads WHERE deleted_at = '' AND owner_id = ? AND last_activity_at = '' AND linkedin != ''").get(uid).n;
+    res.json({ target, done, left, pool, rows });
+  });
   return r;
 }

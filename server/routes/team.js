@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { Router } from 'express';
 import { hashPassword, requireAdmin } from '../auth.js';
+import { applyTargetsTo } from '../lib/seed-ops.js';
 import { HttpError, logActivity, tx } from '../db.js';
 
 export function teamRoutes(db) {
@@ -48,6 +49,7 @@ export function teamRoutes(db) {
       const info = db.prepare(
         'INSERT INTO users(name, email, password_hash, role, active, created_at) VALUES (?,?,?,?,1,?)'
       ).run(String(name).trim(), String(email).trim(), hashPassword(password), role === 'admin' ? 'admin' : 'member', new Date().toISOString());
+      if (role !== 'admin') applyTargetsTo(db, Number(info.lastInsertRowid));
       res.status(201).json({ id: Number(info.lastInsertRowid) });
     } catch (e) {
       if (String(e.message).includes('UNIQUE')) throw new HttpError(409, 'A user with that name or email already exists');

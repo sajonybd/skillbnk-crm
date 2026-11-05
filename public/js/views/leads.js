@@ -1,11 +1,11 @@
 import { api, qs } from '../api.js';
-import { drawPager, h, fill, debounce, options, pill, fullName, timeAgo, todayStr, toast, avatar, copyText, asUrl, shortDate } from '../util.js';
+import { drawPager, h, fill, debounce, options, pref, pill, fullName, timeAgo, todayStr, toast, avatar, copyText, asUrl, shortDate } from '../util.js';
 import { icon, TYPE_ICON } from '../icons.js';
 import { openLead, openNewLead } from './lead-drawer.js';
 import { watchVisit } from '../visit.js';
 
 // Filters survive page switches within the session.
-const state = { q: '', owner: '', stage: '', quality: '', source: '', due: '', untouched: '', meeting: '', page: 1, limit: 50, sort: 'updated_at', dir: 'desc' };
+const state = { q: '', owner: '', stage: '', quality: '', source: '', due: '', untouched: '', meeting: '', page: 1, limit: 50, sort: 'next_action_date', dir: 'asc', _init: false };
 if (state.sort === 'first_name') state.sort = 'name';
 
 // [key, label, default direction]
@@ -36,6 +36,14 @@ export async function render(root, ctx) {
   const [facets, tabs, kpiData] = await Promise.all([api('GET', '/api/leads/facets'), api('GET', '/api/activity/tabs'), api('GET', '/api/kpi')]);
   const { stages, qualities, typeLabels, linkedinTypes } = ctx.config;
   const activeUsers = ctx.users.filter((u) => u.active);
+  if (!state._init) { // first visit after sign-in: your own leads, sorted by what needs doing next; later visits keep your last choice
+    state._init = true;
+    const me = ctx.user.id;
+    state.owner = pref.get(me, 'leads.owner', ctx.user.role === 'admin' ? '' : String(me));
+    state.sort = pref.get(me, 'leads.sort', 'next_action_date'); state.dir = pref.get(me, 'leads.dir', 'asc');
+    state.limit = Number(pref.get(me, 'leads.limit', '50')) || 50;
+  }
+  const savePrefs = () => { const me = ctx.user.id; pref.set(me, 'leads.owner', state.owner); pref.set(me, 'leads.sort', state.sort); pref.set(me, 'leads.dir', state.dir); pref.set(me, 'leads.limit', state.limit); };
   const isAdmin = ctx.user.role === 'admin';
 
   // ── KPI strip ──
@@ -131,6 +139,7 @@ export async function render(root, ctx) {
   }
 
   async function load() {
+    savePrefs();
     data = await api('GET', '/api/leads?' + qs(state));
     toolbar.querySelector('#count').textContent = `${data.total.toLocaleString()} match`;
     drawTable(); drawPagerNow(); drawBulk();

@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { HttpError } from '../db.js';
 import { requireAdmin } from '../auth.js';
 import { RULE_DEFS, DEFAULT_RULES, getRules, saveRules, capFor } from '../lib/rules.js';
+import { getDefaultTargets, BUILTIN_TARGETS } from '../lib/seed-ops.js';
+import { TARGET_METRICS } from '../config.js';
 import { DEFAULT_PLAYBOOK } from '../data/playbook-default.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -29,8 +31,26 @@ export function playbookRoutes(db) {
       rules, defaults: DEFAULT_RULES, defs: RULE_DEFS,
       caps: users.map((u) => ({ user_id: u.id, name: u.name, cap: capFor(db, u.id, rules), custom: setting('cap:' + u.id) !== undefined })),
       markdown: setting('playbook_md') || DEFAULT_PLAYBOOK, customized: setting('playbook_md') !== undefined, ...meta,
+      targets: {
+        metrics: TARGET_METRICS, defaults: getDefaultTargets(db), builtin: BUILTIN_TARGETS,
+        members: users.map((u) => ({ user_id: u.id, name: u.name, targets: Object.fromEntries(db.prepare('SELECT metric, daily_target FROM member_targets WHERE user_id = ?').all(u.id).map((t) => [t.metric, t.daily_target])) })),
+      },
       requests: reqs, open_requests: db.prepare("SELECT COUNT(*) AS n FROM plan_requests WHERE status = 'open'").get().n,
     });
+  });
+
+  // Admin: team default daily targets and each person's own numbers.
+  r.put('/targets', requireAdmin, (req, res) => {
+    const clamp = (v) => Math.max(0, Math.min(5000, Math.round(Number(v) || 0)));
+    const defs = {};
+    for (const m of Object.keys(TARGET_METRICS)) if (req.body?.defaults && m in req.body.defaults) defs[m] = clamp(req.body.defaults[m]);
+    if (Object.keys(defs).length) put('default_targets', JSON.stringify({ ...getDefaultTargets(db), ...defs }));
+    const up = db.prepare('INSERT INTO member_targets(user_id, metric, daily_target) VALUES (?,?,?) ON CONFLICT(user_id, metric) DO UPDATE SET daily_target = excluded.daily_target');
+    for (const [uid, row] of Object.entries(req.body?.members || {})) {
+      if (!db.prepare("SELECT 1 FROM users WHERE id = ? AND active = 1").get(Number(uid))) continue;
+      for (const [m, v] of Object.entries(row || {})) if (Object.hasOwn(TARGET_METRICS, m)) up.run(Number(uid), m, clamp(v));
+    }
+    res.json({ ok: true });
   });
 
   r.put('/rules', requireAdmin, (req, res) => {
