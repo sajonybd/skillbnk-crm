@@ -157,3 +157,48 @@ test('reports: end-of-day lists what was sent, with text, and research verdicts 
   assert.match(p.markdown, /Daily Work Plan/);
   assert.equal((await call('GET', '/api/reports/weekly?from=2026-11-05&to=2026-10-01')).status, 400);
 });
+
+test('playbook: admin changes rules and a per-person cap; plan follows; members can only ask', async () => {
+  const g = await call('GET', '/api/playbook');
+  assert.equal(g.rules.daily_cap, 25);
+  assert.ok(g.markdown.includes('skillBNK outreach plan'));
+  const bad = await call('PUT', '/api/playbook/rules', { rules: { ...g.rules, followup2_day: 3 } });
+  assert.equal(bad.status, 400);
+  const user = (await call('GET', '/api/me')).user || (await call('GET', '/api/team')).users?.[0];
+  const ok = await call('PUT', '/api/playbook/rules', { rules: { ...g.rules, daily_cap: 10, stale_days: 20 }, caps: [] });
+  assert.equal(ok.status, 200);
+  const p = await call('GET', '/api/plan?day=today&assignee=all');
+  assert.ok(p.members.every((m) => m.actions.length <= 10), 'cap of 10 applied');
+  assert.equal(p.stale_days, 20);
+  await call('PUT', '/api/playbook/rules', { rules: g.rules, caps: [] });
+  const t = await call('PUT', '/api/playbook/plan', { markdown: '# New plan\n\nShort but valid plan text for testing.' });
+  assert.equal(t.status, 200);
+  assert.match((await call('GET', '/api/playbook')).markdown, /New plan/);
+  const rq = await call('POST', '/api/playbook/requests', { title: 'Lower my daily limit', details: 'Messages need research' });
+  assert.equal(rq.status, 201);
+  const list = (await call('GET', '/api/playbook')).requests;
+  assert.equal(list[0].title, 'Lower my daily limit');
+  const dec = await call('PATCH', `/api/playbook/requests/${rq.id}`, { status: 'approved', admin_note: 'ok' });
+  assert.equal(dec.status, 200);
+  const docs = await call('GET', '/api/playbook/docs');
+  assert.match(docs.agent, /Authorization: Bearer/);
+  assert.match(docs.team, /Plan/);
+});
+
+test('agent flow with an API key: read plan, log with text, request a change', async () => {
+  const k = await call('POST', '/api/me/tokens', { name: 'agent' });
+  const tok = k.token;
+  const api = async (m, u, b) => { const r = await fetch(base + u, { method: m, headers: { authorization: 'Bearer ' + tok, 'content-type': 'application/json' }, body: b ? JSON.stringify(b) : undefined }); return { status: r.status, ...(await r.json().catch(() => ({}))) }; };
+  const lead = await api('POST', '/api/leads', { first_name: 'Agent', last_name: 'Lead', company: 'Bot Co', email: 'a@bot.co' });
+  assert.equal(lead.status, 201);
+  const dup = await api('POST', '/api/leads', { email: 'A@bot.co', title: 'CEO' });
+  assert.equal(dup.id, lead.id);
+  const st = await api('POST', `/api/leads/${lead.id}/step`, { result: 'comment', note: 'Nice post on cohorts' });
+  assert.equal(st.status, 200);
+  const plan = await api('GET', '/api/plan?assignee=me');
+  assert.equal(plan.status, 200);
+  const rep = await api('GET', '/api/reports/eod?assignee=me');
+  assert.match(rep.markdown, /Nice post on cohorts/);
+  const rq = await api('POST', '/api/playbook/requests', { title: 'Agent suggestion', details: 'x' });
+  assert.equal(rq.status, 201);
+});

@@ -102,6 +102,17 @@ CREATE TABLE IF NOT EXISTS kpi_targets (
   PRIMARY KEY (user_id, effective_week)
 );
 
+CREATE TABLE IF NOT EXISTS plan_requests (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  title TEXT NOT NULL,
+  details TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'open',
+  admin_note TEXT NOT NULL DEFAULT '',
+  decided_by INTEGER,
+  created_at TEXT NOT NULL,
+  decided_at TEXT NOT NULL DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL

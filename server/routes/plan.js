@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { TARGET_METRICS, TZ_OFFSET_MIN } from '../config.js';
 import { todayLocal, addDays, weekStart } from '../lib/kpi.js';
-import { nextStep, KINDS, STALE_AFTER_DAYS, clean } from '../lib/cadence.js';
+import { nextStep, KINDS, clean } from '../lib/cadence.js';
+import { getRules, capFor } from '../lib/rules.js';
 import { isWorkingDay } from '../lib/taskdays.js';
 import { tasksOn } from './tasks.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-export const DAILY_CAP = 25; // how many lead actions one person is given per day; the rest carry over
 const TIER_RANK = { A: 0, B: 1, C: 2, '': 3 };
 const nextWorkingDay = (d) => { let x = addDays(d, 1); while (!isWorkingDay(x)) x = addDays(x, 1); return x; };
 
@@ -17,6 +17,7 @@ const dhakaHour = () => new Date(Date.now() + TZ_OFFSET_MIN * 60000).getUTCHours
 export function planMembers(db, { date, today, picked, skipEmpty = false }) {
   const shift = `${TZ_OFFSET_MIN >= 0 ? '+' : '-'}${Math.abs(TZ_OFFSET_MIN)} minutes`;
   const isToday = date === today;
+  const rules = getRules(db);
   const rows = db.prepare(
     `SELECT * FROM leads WHERE deleted_at = '' AND owner_id IS NOT NULL AND
      (invite_sent_date != '' OR accepted_date != '' OR first_dm_date != '' OR next_action_date != '' OR outreach_status = 'R')`
@@ -52,7 +53,7 @@ export function planMembers(db, { date, today, picked, skipEmpty = false }) {
     const mine = byOwner.get(u.id) || [];
     const all = [];
     for (const l of mine) {
-      const s = nextStep(l, date);
+      const s = nextStep(l, date, rules);
       if (!s) continue;
       const late = Math.round((Date.parse(date) - Date.parse(s.due)) / 86400000);
       all.push({
@@ -61,11 +62,12 @@ export function planMembers(db, { date, today, picked, skipEmpty = false }) {
         outreach_status: l.outreach_status, email: l.email && /verified|valid/i.test(l.email_status) ? l.email : '',
         linkedin: l.linkedin, question: clean(l.todays_question), why: clean(l.why_in_pipeline),
         pursue: /\bPURSUE\b/i.test(`${l.next_action} ${l.assessment} ${l.why_in_pipeline} ${l.problem_pool}`),
-        stale: late > STALE_AFTER_DAYS && !['reply', 'first_message'].includes(s.kind), _rank: KINDS[s.kind].rank,
+        stale: late > rules.stale_days && !['reply', 'first_message'].includes(s.kind), _rank: KINDS[s.kind].rank,
       });
     }
     // 1) replied or PURSUE leads, 2) due today, 3) late (least late first); then step type, tier A first.
     const band = (x) => (x.kind === 'reply' || x.pursue ? 0 : x.late_days <= 0 ? 1 : 2);
+    const cap = capFor(db, u.id, rules);
     const live = all.filter((x) => !x.stale).sort((x, y) => band(x) - band(y) || (band(x) === 2 ? x.late_days - y.late_days : 0) || x._rank - y._rank || TIER_RANK[x.tier || ''] - TIER_RANK[y.tier || ''] || x.id - y.id);
     const stale = all.filter((x) => x.stale).sort((x, y) => y.late_days - x.late_days);
     for (const x of [...live, ...stale]) delete x._rank;
@@ -86,8 +88,8 @@ export function planMembers(db, { date, today, picked, skipEmpty = false }) {
     if (skipEmpty && !all.length && !tasks.length && !targets.length && !mine.length) continue; // nothing to show for this person
     members.push({
       user_id: u.id, name: u.name,
-      summary: { actions: live.length, shown: Math.min(live.length, DAILY_CAP), carry_over: Math.max(0, live.length - DAILY_CAP), stale: stale.length, tasks: tasks.length, tasks_done: tasks.filter((t) => t.done).length },
-      actions: live.slice(0, DAILY_CAP),
+      summary: { actions: live.length, shown: Math.min(live.length, cap), carry_over: Math.max(0, live.length - cap), cap, stale: stale.length, tasks: tasks.length, tasks_done: tasks.filter((t) => t.done).length },
+      actions: live.slice(0, cap),
       stale: stale.slice(0, 200),
       targets, tasks,
       responses: {
@@ -121,7 +123,7 @@ export function planRoutes(db) {
     const members = planMembers(db, { date, today, picked, skipEmpty: a === 'all' });
     res.json({
       now_hour: dhakaHour(), after_noon: afterNoon, today, tomorrow, date, is_today: isToday, working_day: isWorkingDay(date),
-      skipped_friday: addDays(today, 1) !== tomorrow, daily_cap: DAILY_CAP, members,
+      skipped_friday: addDays(today, 1) !== tomorrow, daily_cap: getRules(db).daily_cap, stale_days: getRules(db).stale_days, members,
     });
   });
   return r;

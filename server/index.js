@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createApp } from './app.js';
 import { openDb } from './db.js';
-import { seedAdmin, seedTeam } from './auth.js';
+import { seedAdmin, seedTeam, hashPassword } from './auth.js';
 import { DB_FILE, PORT, DEFAULT_ADMIN, TEAM_DEFAULT_PASSWORD, DATA_DIR } from './config.js';
 import { seedOps } from './lib/seed-ops.js';
 import { startBackups } from './lib/backup.js';
@@ -29,6 +29,15 @@ if (seedAdmin(db)) {
   console.log(`  email:    ${DEFAULT_ADMIN.email}`);
   console.log(process.env.ADMIN_PASSWORD ? '  password:  (the ADMIN_PASSWORD you set)' : `  password: ${DEFAULT_ADMIN.password}`);
   console.log('  Sign in and change the password (top right → Password).\n');
+}
+// Locked out? Set RESET_ADMIN_PASSWORD=1 with ADMIN_EMAIL and ADMIN_PASSWORD, redeploy once, then delete RESET_ADMIN_PASSWORD.
+if (process.env.RESET_ADMIN_PASSWORD && process.env.ADMIN_PASSWORD) {
+  const email = String(process.env.ADMIN_EMAIL || DEFAULT_ADMIN.email).trim().toLowerCase();
+  const u = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(email);
+  if (u) {
+    db.prepare("UPDATE users SET password_hash = ?, active = 1, role = 'admin' WHERE id = ?").run(hashPassword(process.env.ADMIN_PASSWORD), u.id);
+    console.log(`Password reset for ${email}. Now delete the RESET_ADMIN_PASSWORD setting.`);
+  } else console.log(`RESET_ADMIN_PASSWORD: no user with email ${email}`);
 }
 const madeTeam = seedTeam(db);
 seedOps(db);

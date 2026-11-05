@@ -550,3 +550,5 @@ td:last-child { min-width: 200px; max-width: 240px; }
   body, .page { background: #fff !important; padding: 0 !important; }
   .rep-doc { border: 0; padding: 0; max-width: none; }
 }
+.rule { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid #f0f2f6; }
+.rule:last-child { border-bottom: 0; }

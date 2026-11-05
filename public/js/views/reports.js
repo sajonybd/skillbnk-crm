@@ -16,7 +16,7 @@ function inline(text) {
   String(text).split(/\*\*/).forEach((part, i) => { if (part) out.push(i % 2 ? h('b', null, part) : part); });
   return out;
 }
-function renderMd(md) {
+export function renderMd(md) {
   const doc = h('div', { class: 'rep-doc' });
   const lines = md.split('\n');
   let i = 0;

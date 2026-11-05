@@ -10,6 +10,8 @@ import * as trash from './views/trash.js';
 import * as meetings from './views/meetings.js';
 import * as plan from './views/plan.js';
 import * as reports from './views/reports.js';
+import * as playbook from './views/playbook.js';
+import * as help from './views/help.js';
 import * as targets from './views/targets.js';
 import * as tasks from './views/tasks.js';
 
@@ -22,6 +24,8 @@ const PAGES = [
   { path: 'reports', label: 'Reports', icon: 'chart', view: reports },
   { path: 'meetings', label: 'Meetings', icon: 'calendar', view: meetings },
   { path: 'analytics', label: 'Analytics', icon: 'chart', view: analytics },
+  { path: 'playbook', label: 'Playbook', icon: 'book', view: playbook },
+  { path: 'help', label: 'Help', icon: 'help', view: help },
   { path: 'import', label: 'Import', icon: 'inbox', view: importer },
   { path: 'team', label: 'Team', icon: 'userCheck', view: team, adminOnly: true },
   { path: 'trash', label: 'Recycle bin', icon: 'trash', view: trash, adminOnly: true },

@@ -8,6 +8,7 @@ import { cleanUrl, detectKind, isKind } from '../lib/links.js';
 import { createMeeting } from '../lib/meetings.js';
 import { todayLocal, addDays } from '../lib/kpi.js';
 import { nextStep } from '../lib/cadence.js';
+import { getRules } from '../lib/rules.js';
 
 const TEXT_FIELDS = [
   'first_name', 'last_name', 'title', 'company', 'email', 'email_status', 'phone',
@@ -338,6 +339,7 @@ export function leadsRoutes(db) {
   // Today's queue: leads whose next outreach step has come due (playbook cadence + scheduled follow-ups).
   r.get('/queue', (req, res) => {
     const today = todayLocal();
+    const rules = getRules(db);
     const where = ["deleted_at = ''", "(invite_sent_date != '' OR accepted_date != '' OR first_dm_date != '' OR next_action_date != '')"];
     const params = [];
     const owner = req.query.owner === 'me' || !req.query.owner ? req.user.id : req.query.owner === 'all' ? null : Number(req.query.owner);
@@ -345,7 +347,7 @@ export function leadsRoutes(db) {
     const rows = db.prepare(`SELECT l.*, u.name AS owner_name FROM leads l LEFT JOIN users u ON u.id = l.owner_id WHERE ${where.join(' AND ')}`).all(...params);
     const items = [];
     for (const l of rows) {
-      const s = nextStep(l, today);
+      const s = nextStep(l, today, rules);
       if (!s) continue;
       items.push({ id: l.id, name: `${l.first_name} ${l.last_name}`.trim(), company: l.company, title: l.title, owner_id: l.owner_id, owner_name: l.owner_name,
         outreach_status: l.outreach_status, stage: l.stage, due: s.due, overdue_days: Math.round((Date.parse(today) - Date.parse(s.due)) / 86400000), action: s.action, reason: s.reason,
@@ -481,6 +483,7 @@ export function leadsRoutes(db) {
     const note = String(req.body?.note || '').trim().slice(0, 2000); // the message / comment text, for the EOD report
     if (!RESULTS.includes(result)) throw new HttpError(400, 'Unknown result');
     const today = todayLocal();
+    const rules = getRules(db);
     const plan = (date, text) => db.prepare("UPDATE leads SET next_action_date = ?, next_action = ?, snooze_until = '', updated_at = ? WHERE id = ?").run(date, text, new Date().toISOString(), lead.id);
     const snooze = (date) => db.prepare('UPDATE leads SET snooze_until = ?, updated_at = ? WHERE id = ?').run(date, new Date().toISOString(), lead.id);
     const fresh = () => db.prepare('SELECT * FROM leads WHERE id = ?').get(lead.id);
@@ -492,17 +495,17 @@ export function leadsRoutes(db) {
         plan(today, 'Send the first message');
       } else if (result === 'pending') {
         logActivity(db, { lead_id: lead.id, user_id: req.user.id, type: 'note', note: 'Invite still pending' });
-        snooze(addDays(today, 3));
+        snooze(addDays(today, rules.pending_recheck_days));
       } else if (result === 'sent') {
         const email = kind === 'email';
         recordActivity(lead, email ? 'email' : 'linkedin_dm', note, req.user);
         const cur = fresh();
         if (['', 'U', 'SNR'].includes(cur.outreach_status)) applyChanges(cur, { outreach_status: 'U' }, req.user);
-        if (email) plan(addDays(today, 7), 'Email sent. Check for a reply, otherwise comment on their post');
-        else if (kind === 'last_followup') plan(addDays(today, 30), 'Two messages unanswered. Only like or comment on their posts');
-        else if (kind === 'reply' || cur.outreach_status === 'R') plan(addDays(today, 3), 'Check if they answered');
+        if (email) plan(addDays(today, rules.followup1_day), 'Email sent. Check for a reply, otherwise comment on their post');
+        else if (kind === 'last_followup') plan(addDays(today, rules.nurture_days), 'Two messages unanswered. Only like or comment on their posts');
+        else if (kind === 'reply' || cur.outreach_status === 'R') plan(addDays(today, rules.pending_recheck_days), 'Check if they answered');
         else if (kind === 'followup') {
-          const day14 = addDays(cur.first_dm_date || today, 14);
+          const day14 = addDays(cur.first_dm_date || today, rules.followup2_day);
           plan('', ''); snooze(day14 <= today ? addDays(today, 4) : day14);
         } else plan('', '');
       } else if (result === 'seen') {
@@ -512,7 +515,7 @@ export function leadsRoutes(db) {
         plan('', '');
       } else if (result === 'nurture') {
         applyChanges(lead, { outreach_status: 'NUTR' }, req.user);
-        plan(addDays(today, 30), 'Nurture: like or comment on their posts, check back');
+        plan(addDays(today, rules.nurture_days), 'Nurture: like or comment on their posts, check back');
       } else if (result === 'not_interested') {
         applyChanges(lead, { outreach_status: 'NI' }, req.user);
         plan('', '');

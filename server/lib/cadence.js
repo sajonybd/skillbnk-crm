@@ -4,6 +4,7 @@
 // Every step has a `kind` (what sort of job it is), a short `verb` (what to do, in plain words) and a
 // `detail` (the longer instruction or the lead's own note). The UI builds its buttons from the kind.
 import { addDays } from './kpi.js';
+import { DEFAULT_RULES } from './rules.js';
 
 const NULLISH = /^(null|undefined|none|n\/a|na|-|—)$/i;
 export const clean = (s) => (NULLISH.test(String(s ?? '').trim()) ? '' : String(s ?? '').trim());
@@ -30,7 +31,7 @@ function kindOfNote(text) {
 
 const finish = (s) => ({ ...s, action: KINDS[s.kind].verb + (s.kind === 'scheduled' || s.kind === 'research' ? ': ' + s.detail : '') });
 
-export function nextStep(l, today) {
+export function nextStep(l, today, rules = DEFAULT_RULES) {
   if (l.stage === 'Closed' || l.quality === 'Not a Fit') return null;
   if (l.snooze_until && l.snooze_until > today) return null;
   const note = clean(l.next_action);
@@ -47,13 +48,13 @@ export function nextStep(l, today) {
   if (planned) steps.push(planned);
   if (l.invite_sent_date && !l.accepted_date) {
     const email = l.email && l.email_status && /verified|valid/i.test(l.email_status);
-    steps.push({ due: addDays(l.invite_sent_date, 7), kind: 'check_invite', detail: 'If still pending, do not message', reason: 'Day 7 after invite' });
-    steps.push({ due: addDays(l.invite_sent_date, 8), kind: email ? 'email' : 'no_email', detail: email ? 'Verified address. Then withdraw the stale invite' : 'No verified email', reason: 'Day 8 after invite' });
+    steps.push({ due: addDays(l.invite_sent_date, rules.invite_check_day), kind: 'check_invite', detail: 'If still pending, do not message', reason: `Day ${rules.invite_check_day} after invite` });
+    steps.push({ due: addDays(l.invite_sent_date, rules.email_day), kind: email ? 'email' : 'no_email', detail: email ? 'Verified address. Then withdraw the stale invite' : 'No verified email', reason: `Day ${rules.email_day} after invite` });
   }
   if (l.accepted_date && !l.first_dm_date) steps.push({ due: l.accepted_date, kind: 'first_message', detail: 'One observation, one peer-level question', reason: 'Accepted, no message yet' });
   if (l.first_dm_date) {
-    steps.push({ due: addDays(l.first_dm_date, 7), kind: 'followup', detail: 'New angle, not "just checking in"', reason: 'No reply 7 days after first message' });
-    steps.push({ due: addDays(l.first_dm_date, 14), kind: 'last_followup', detail: 'Two unanswered messages is the limit', reason: 'No reply 14 days after first message' });
+    steps.push({ due: addDays(l.first_dm_date, rules.followup1_day), kind: 'followup', detail: 'New angle, not "just checking in"', reason: `No reply ${rules.followup1_day} days after first message` });
+    steps.push({ due: addDays(l.first_dm_date, rules.followup2_day), kind: 'last_followup', detail: 'Two unanswered messages is the limit', reason: `No reply ${rules.followup2_day} days after first message` });
   }
   // The most recent step that has come due.
   const due = steps.filter((s) => s.due <= today).sort((a, b) => (a.due < b.due ? 1 : -1));
@@ -62,5 +63,3 @@ export function nextStep(l, today) {
   return finish(s);
 }
 
-// A step that is this many days late is not a follow-up any more; it goes to the "stale" pile to close or revive.
-export const STALE_AFTER_DAYS = 14;
