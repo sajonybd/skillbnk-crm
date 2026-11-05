@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { TARGET_METRICS, TZ_OFFSET_MIN, OUTREACH_STATUSES, MEETING_STATUSES } from '../config.js';
+import { TARGET_METRICS, TZ_OFFSET_MIN, OUTREACH_STATUSES, MEETING_STATUSES, PLAN_SWITCH_HOUR } from '../config.js';
 import { HttpError } from '../db.js';
 import { todayLocal, addDays, computeKpi } from '../lib/kpi.js';
 import { isWorkingDay } from '../lib/taskdays.js';
@@ -101,7 +101,7 @@ export function reportRoutes(db) {
 
   r.get('/plan', (req, res) => {
     const today = todayLocal();
-    const date = DATE_RE.test(req.query.date || '') ? req.query.date : dhakaHour() >= 12 ? nextWorkingDay(today) : today;
+    const date = DATE_RE.test(req.query.date || '') ? req.query.date : dhakaHour() >= PLAN_SWITCH_HOUR ? nextWorkingDay(today) : today;
     const { picked } = pickPeople(req);
     const md = picked.map((u) => planMd(u, date, today)).join('\n\n---\n\n');
     res.json({ kind: 'plan', title: `Daily Work Plan ${date}`, date, markdown: md });

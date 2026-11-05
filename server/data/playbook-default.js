@@ -22,7 +22,7 @@ export const DEFAULT_PLAYBOOK = `# skillBNK outreach plan
 2. For each lead, do the action shown (for example send the short email), type what you wrote in the box, then press the button that matches what happened.
 3. Hit your **daily targets** (profile reviews, comments, likes, follows, connection requests, direct messages).
 4. Do your **team tasks** and tick them off.
-5. After 12:00 the Plan opens on the next working day so tomorrow is ready. Friday is the day off.
+5. After 6 pm the Plan opens on the next working day so tomorrow is ready. Friday is the day off.
 6. End of day: open **Reports → End-of-day update**, copy it and submit.
 
 ## The follow-up cadence (numbers are on the Rules tab)

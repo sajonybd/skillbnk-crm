@@ -9,7 +9,7 @@ This CRM turns the marketing plan into a daily to-do list. Open **Plan** each mo
 4. **Hit your daily targets** and tick your **team tasks**.
 5. At the end of the day open **Reports → End-of-day update**, press Copy and submit it.
 
-After 12:00 the Plan opens on the **next working day** so tomorrow's work is ready. Use the Today / Tomorrow switch to go back. Friday is the day off.
+After 6 pm the Plan opens on the **next working day** so tomorrow's work is ready. Use the Today / Tomorrow switch to go back. Friday is the day off.
 
 ## 2. Reading a lead card
 - **Name, title, company.** A green **PURSUE** badge means the plan marks this lead as a real opportunity. **A / B / C** is the tier.

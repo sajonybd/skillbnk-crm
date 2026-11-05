@@ -46,7 +46,7 @@ export async function render(root, ctx) {
     for (const id of [...selected]) if (!data.rows.some((r) => r.id === id) && data.total === 0) selected.delete(id);
     count.textContent = `${data.total.toLocaleString()} in bin`;
     emptyBtn.disabled = data.total === 0 && !state.q;
-    drawTable(); drawPager(); drawBulk();
+    drawTable(); drawPagerNow(); drawBulk();
   }
 
   function drawTable() {
@@ -80,7 +80,7 @@ export async function render(root, ctx) {
       }))));
   }
 
-  function drawPager() {
+  function drawPagerNow() {
     drawPager(pager, { page: state.page, limit: state.limit, total: data.total, onPage: (n) => { state.page = n; load(); } });
   }
 

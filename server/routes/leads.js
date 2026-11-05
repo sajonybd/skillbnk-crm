@@ -1,3 +1,4 @@
+import { WORK_CASE, WORK_KEYS, WORK_GROUPS, workOrder } from '../lib/work.js';
 import { Router } from 'express';
 import { STAGES, QUALITIES, MANUAL_TYPES, FIRST_TOUCH_TYPES, COMPANY_VIEW_TYPE, MEETING_TYPES, LINK_KINDS, LEAD_CATEGORIES, TIERS, OUTREACH_STATUSES, CHANNELS, OPPORTUNITY_PATHS } from '../config.js';
 import { HttpError, logActivity, tx } from '../db.js';
@@ -28,6 +29,7 @@ const ENUM_FIELDS = {
 // Sort keys the UI can ask for. `blank` = rows with an empty value always go last.
 const stageCase = 'CASE l.stage ' + STAGES.map((st, i) => `WHEN '${st}' THEN ${i}`).join(' ') + ' ELSE 99 END';
 const SORTS = {
+  get work() { return { expr: workOrder(todayLocal()) }; },
   updated_at: { expr: 'l.updated_at' },
   created_at: { expr: 'l.created_at' },
   name: { expr: "LOWER(l.first_name || ' ' || l.last_name)" },
@@ -146,6 +148,8 @@ export function leadsRoutes(db) {
     else if (q.quality) { where.push('l.quality = ?'); params.push(q.quality); }
     if (q.source) { where.push('l.source = ?'); params.push(q.source); }
     if (q.untouched === '1') where.push("l.last_activity_at = ''");
+    if (WORK_GROUPS[q.work]) { where.push(`${WORK_CASE} IN (${WORK_GROUPS[q.work].map(() => '?').join(',')})`); params.push(...WORK_GROUPS[q.work]); }
+    else if (WORK_KEYS.includes(q.work)) { where.push(`${WORK_CASE} = ?`); params.push(q.work); }
     if (q.meeting === '1') where.push("l.meeting_date != ''");
     if (q.due === '1') { where.push("l.next_action_date != '' AND l.next_action_date <= ?"); params.push(todayLocal()); }
     return { sql: where.length ? 'WHERE ' + where.join(' AND ') : '', params };
@@ -160,7 +164,7 @@ export function leadsRoutes(db) {
     const order = `${sd.blank ? `(${sd.blank} IS NULL OR ${sd.blank} = '') ASC, ` : ''}${sd.expr} ${dir}`;
     const total = db.prepare(`SELECT COUNT(*) AS n FROM leads l ${sql}`).get(...params).n;
     const rows = db.prepare(
-      `SELECT l.*, u.name AS owner_name,
+      `SELECT l.*, u.name AS owner_name, ${WORK_CASE} AS work,
               (SELECT COUNT(*) FROM activities a WHERE a.lead_id = l.id AND a.type NOT IN (${NON_TOUCH_SQL})) AS activity_count,
               (SELECT a.type FROM activities a WHERE a.lead_id = l.id AND a.type NOT IN (${NON_TOUCH_SQL}) ORDER BY a.created_at DESC, a.id DESC LIMIT 1) AS last_type,
               (SELECT url FROM lead_links k WHERE k.lead_id = l.id AND k.kind = 'drive' ORDER BY k.id LIMIT 1) AS drive_url,
@@ -176,6 +180,16 @@ export function leadsRoutes(db) {
     const { sql, params } = buildWhere(req.query, req.user);
     const ids = db.prepare(`SELECT l.id FROM leads l ${sql} ORDER BY l.id LIMIT 5000`).all(...params).map((x) => x.id);
     res.json({ ids });
+  });
+
+  // Counts per working stage (for the tabs above the table), for one owner or everyone.
+  r.get('/work-counts', (req, res) => {
+    const o = req.query.owner;
+    const cond = o === 'none' ? 'AND l.owner_id IS NULL' : o ? 'AND l.owner_id = ?' : '';
+    const rows = db.prepare(`SELECT ${WORK_CASE} AS k, COUNT(*) AS n FROM leads l WHERE l.deleted_at = '' ${cond} GROUP BY 1`).all(...(o && o !== 'none' ? [Number(o)] : []));
+    const out = Object.fromEntries(rows.map((x) => [x.k, x.n]));
+    for (const [g, keys] of Object.entries(WORK_GROUPS)) out[g] = keys.reduce((a, k) => a + (out[k] || 0), 0);
+    res.json(out);
   });
 
   r.get('/facets', (_req, res) => {

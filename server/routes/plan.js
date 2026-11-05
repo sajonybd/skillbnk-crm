@@ -1,9 +1,10 @@
 import { Router } from 'express';
-import { TARGET_METRICS, TZ_OFFSET_MIN } from '../config.js';
+import { TARGET_METRICS, TZ_OFFSET_MIN, PLAN_SWITCH_HOUR } from '../config.js';
 import { todayLocal, addDays, weekStart } from '../lib/kpi.js';
 import { nextStep, KINDS, clean } from '../lib/cadence.js';
 import { getRules, capFor } from '../lib/rules.js';
 import { isWorkingDay } from '../lib/taskdays.js';
+import { WORK_CASE } from '../lib/work.js';
 import { tasksOn } from './tasks.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -107,10 +108,10 @@ export function planRoutes(db) {
   const shift = `${TZ_OFFSET_MIN >= 0 ? '+' : '-'}${Math.abs(TZ_OFFSET_MIN)} minutes`;
 
   // What each person has to do on one day: lead actions (with the exact next step), team tasks, daily targets,
-  // how leads are responding, and what was achieved. After 12:00 the default day is the next working day.
+  // how leads are responding, and what was achieved. After 6 pm the default day is the next working day.
   r.get('/', (req, res) => {
     const today = todayLocal();
-    const afterNoon = dhakaHour() >= 12;
+    const afterNoon = dhakaHour() >= PLAN_SWITCH_HOUR;
     const tomorrow = nextWorkingDay(today);
     let date = DATE_RE.test(req.query.date || '') ? req.query.date : req.query.day === 'tomorrow' ? tomorrow : req.query.day === 'today' ? today : afterNoon ? tomorrow : today;
     if (!isWorkingDay(date) && date === today) date = today; // Friday: show it anyway, tasks/targets will be empty
@@ -122,27 +123,29 @@ export function planRoutes(db) {
 
     const members = planMembers(db, { date, today, picked, skipEmpty: a === 'all' });
     res.json({
-      now_hour: dhakaHour(), after_noon: afterNoon, today, tomorrow, date, is_today: isToday, working_day: isWorkingDay(date),
+      now_hour: dhakaHour(), switch_hour: PLAN_SWITCH_HOUR, after_noon: afterNoon, today, tomorrow, date, is_today: isToday, working_day: isWorkingDay(date),
       skipped_friday: addDays(today, 1) !== tomorrow, daily_cap: getRules(db).daily_cap, stale_days: getRules(db).stale_days, members,
     });
   });
 
-  // The profile-review list: the exact leads a person should open today to reach the "profile reviews" target.
-  // Untouched leads they own, best tier first, oldest import first. Opening a profile logs the view and removes it.
+  // Two working lists for one person. mode=research: leads with no lead type yet (look at website, profile and company
+  // page, then choose a type). mode=engage: real fits with no invite yet (like, comment, follow, connect, InMail).
   r.get('/review', (req, res) => {
     const today = todayLocal();
     const a = req.query.assignee;
     const uid = req.user.role === 'admin' && a && a !== 'me' && a !== 'all' ? Number(a) : req.user.id;
+    const mode = req.query.mode === 'engage' ? 'engage' : 'research';
     const target = db.prepare("SELECT daily_target FROM member_targets WHERE user_id = ? AND metric = 'linkedin_view'").get(uid)?.daily_target || 0;
     const done = db.prepare(`SELECT COUNT(*) AS n FROM activities WHERE user_id = ? AND type = 'linkedin_view' AND date(created_at, '${shift}') = ?`).get(uid, today).n;
-    const left = Math.max(0, target - done);
+    const where = `l.deleted_at = '' AND l.owner_id = ? AND ${WORK_CASE} = ?`;
     const rows = db.prepare(
-      `SELECT id, first_name, last_name, title, company, linkedin, tier, state, source FROM leads
-       WHERE deleted_at = '' AND owner_id = ? AND last_activity_at = '' AND linkedin != ''
-       ORDER BY CASE tier WHEN 'A' THEN 0 WHEN 'B' THEN 1 WHEN 'C' THEN 2 ELSE 3 END, created_at ASC, id ASC LIMIT ?`
-    ).all(uid, Math.min(left || 100, 100));
-    const pool = db.prepare("SELECT COUNT(*) AS n FROM leads WHERE deleted_at = '' AND owner_id = ? AND last_activity_at = '' AND linkedin != ''").get(uid).n;
-    res.json({ target, done, left, pool, rows });
+      `SELECT l.id, l.first_name, l.last_name, l.title, l.company, l.linkedin, l.company_linkedin, l.website, l.tier, l.quality, l.source, l.city, l.state,
+              EXISTS(SELECT 1 FROM activities x WHERE x.lead_id = l.id AND x.user_id = ? AND x.type = 'linkedin_view' AND date(x.created_at, '${shift}') = ?) AS viewed_today
+       FROM leads l WHERE ${where}
+       ORDER BY CASE l.tier WHEN 'A' THEN 0 WHEN 'B' THEN 1 WHEN 'C' THEN 2 ELSE 3 END, l.created_at ASC, l.id ASC LIMIT ?`
+    ).all(uid, today, uid, mode, Math.max(25, Math.min(target || 100, 100)));
+    const pool = db.prepare(`SELECT COUNT(*) AS n FROM leads l WHERE ${where}`).get(uid, mode).n;
+    res.json({ mode, target, done, pool, rows });
   });
   return r;
 }

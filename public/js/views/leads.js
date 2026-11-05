@@ -3,14 +3,15 @@ import { drawPager, h, fill, debounce, options, pref, pill, fullName, timeAgo, t
 import { icon, TYPE_ICON } from '../icons.js';
 import { openLead, openNewLead } from './lead-drawer.js';
 import { watchVisit } from '../visit.js';
+import { renderFollowups, followupCounts } from './followups.js';
 
 // Filters survive page switches within the session.
-const state = { q: '', owner: '', stage: '', quality: '', source: '', due: '', untouched: '', meeting: '', page: 1, limit: 50, sort: 'next_action_date', dir: 'asc', _init: false };
+const state = { q: '', owner: '', stage: '', quality: '', source: '', due: '', untouched: '', meeting: '', page: 1, limit: 50, sort: 'work', dir: 'asc', work: '', _init: false };
 if (state.sort === 'first_name') state.sort = 'name';
 
 // [key, label, default direction]
 const SORTS = [
-  ['updated_at', 'Recently updated', 'desc'], ['created_at', 'Date imported', 'desc'], ['name', 'Name', 'asc'],
+  ['work', 'Work order (next action)', 'asc'], ['updated_at', 'Recently updated', 'desc'], ['created_at', 'Date imported', 'desc'], ['name', 'Name', 'asc'],
   ['company', 'Company', 'asc'], ['owner', 'Owner', 'asc'], ['stage', 'Stage (pipeline order)', 'asc'],
   ['quality', 'Quality', 'asc'], ['last_activity_at', 'Last activity', 'desc'], ['touches', 'Most touched', 'desc'],
   ['next_action_date', 'Next action date', 'asc'], ['meeting_date', 'Meeting date', 'asc'],
@@ -40,10 +41,10 @@ export async function render(root, ctx) {
     state._init = true;
     const me = ctx.user.id;
     state.owner = pref.get(me, 'leads.owner', ctx.user.role === 'admin' ? '' : String(me));
-    state.sort = pref.get(me, 'leads.sort', 'next_action_date'); state.dir = pref.get(me, 'leads.dir', 'asc');
+    state.sort = pref.get(me, 'leads.sort', 'work'); state.work = pref.get(me, 'leads.work', ctx.user.role === 'admin' ? '' : '_follow'); state.dir = pref.get(me, 'leads.dir', 'asc');
     state.limit = Number(pref.get(me, 'leads.limit', '50')) || 50;
   }
-  const savePrefs = () => { const me = ctx.user.id; pref.set(me, 'leads.owner', state.owner); pref.set(me, 'leads.sort', state.sort); pref.set(me, 'leads.dir', state.dir); pref.set(me, 'leads.limit', state.limit); };
+  const savePrefs = () => { const me = ctx.user.id; pref.set(me, 'leads.owner', state.owner); pref.set(me, 'leads.sort', state.sort); pref.set(me, 'leads.dir', state.dir); pref.set(me, 'leads.limit', state.limit); pref.set(me, 'leads.work', state.work); };
   const isAdmin = ctx.user.role === 'admin';
 
   // ── KPI strip ──
@@ -104,10 +105,47 @@ export async function render(root, ctx) {
     fill(toggles, t('untouched', 'Untouched', facets.untouched, 'inbox'), t('due', 'Follow-ups due', facets.due, 'clock'), t('meeting', 'Has meeting', facets.meetings, 'calendar'));
   }
 
+  // ── working stage tabs: few, colour-coded, one kind of work each ──
+  const WORK_TABS = [['', 'All', 'all'], ['_follow', 'Follow-ups due', 'red'], ['research', 'To research', 'amber'], ['engage', 'To engage', 'blue'], ['waiting', 'Waiting', 'grey'], ['meeting', 'Meeting booked', 'green'], ['parked', 'Parked', 'mute']];
+  const WORK_HINT = {
+    _follow: 'Do these today, from the top: replies first, then due, then late. Type what you wrote, then press the button.',
+    research: 'Open the Web, Co and LI links, then set the lead type in the Quality column. Not a Fit: write the reason in the lead.',
+    engage: 'Real fits, no invite yet. Like, comment, follow (LinkedIn icon), then log Connection request or InMail. Connect starts the 7-day follow-up.',
+    waiting: 'Invite sent or messaged. Nothing to do until the next step is due (it then appears under Follow-ups due).',
+    meeting: 'A meeting is booked. Prepare and run it (Meetings page).',
+    parked: 'Nurture (check back in 30 days), not interested, or not a fit. No outreach now.',
+  };
+  // What each row's coloured tag says (same colours as the tabs).
+  const WORK_TAG = { research: ['Research', 'amber'], engage: ['Engage', 'blue'], message: ['Send message', 'purple'], invited: ['Waiting', 'grey'], followup: ['Waiting', 'grey'], replied: ['Reply now', 'red'], meeting: ['Meeting', 'green'], nurture: ['Parked', 'mute'], declined: ['Parked', 'mute'], notfit: ['Parked', 'mute'] };
+  if (!WORK_TABS.some(([k]) => k === state.work) && state.work !== '_stale') state.work = '';
+  const workbar = h('div', { class: 'toolbar', style: 'padding:8px 14px;flex-direction:column;align-items:flex-start;gap:6px' });
+  let workCounts = {}, viewsLine = '', fc = { actions: 0, stale: 0 };
+  const assignee = () => (/^\d+$/.test(state.owner) ? state.owner : 'me');
+  const fuSwitch = h('div', { class: 'seg', style: 'margin-bottom:12px;align-self:flex-start' });
+  const fuBody = h('div');
+  const panel = h('div', { style: 'display:none;padding:14px' }, fuSwitch, fuBody);
+  async function drawWork() {
+    try { workCounts = await api('GET', '/api/leads/work-counts?' + qs({ owner: state.owner })); } catch { /* keep old */ }
+    try { fc = await followupCounts(assignee()); } catch { /* keep old */ }
+    workCounts._follow = fc.actions;
+    if (state.work === 'research' && /^\d+$/.test(state.owner)) {
+      try { const r = await api('GET', '/api/plan/review?' + qs({ assignee: state.owner, mode: 'research' })); viewsLine = `${r.done} of ${r.target} profiles viewed today`; } catch { viewsLine = ''; }
+    } else viewsLine = '';
+    const total = Object.entries(workCounts).filter(([k]) => !k.startsWith('_') && !['waiting', 'parked'].includes(k) && !['invited', 'followup', 'nurture', 'declined', 'notfit'].includes(k)).reduce((a, [, b]) => a + b, 0)
+      + (workCounts.waiting || 0) + (workCounts.parked || 0);
+    const isOn = (k) => state.work === k || (k === '_follow' && state.work === '_stale');
+    fill(workbar,
+      h('div', { class: 'row', style: 'flex-wrap:wrap;gap:6px' }, WORK_TABS.map(([k, label, tone]) => h('button', { class: 'chip noav wt ' + tone + (isOn(k) ? ' on' : ''),
+        onclick: () => { state.work = k; state.page = 1; drawWork(); load(); } }, label, h('span', { class: 'n' }, `(${(k ? workCounts[k] || 0 : total).toLocaleString()})`)))),
+      WORK_HINT[state.work === '_stale' ? '_follow' : state.work] ? h('div', { class: 'muted' }, WORK_HINT[state.work === '_stale' ? '_follow' : state.work], viewsLine ? h('b', { style: 'margin-left:8px' }, viewsLine) : null) : null);
+    const sw = (k, text) => h('button', { class: 'segb' + (state.work === k ? ' on' : ''), onclick: () => { state.work = k; drawWork(); load(); } }, text);
+    fill(fuSwitch, sw('_follow', `Due now (${fc.actions})`), sw('_stale', `Stale: nurture or close (${fc.stale})`));
+  }
+
   const chips = h('div', { class: 'chips' });
   function drawChips() {
     const chip = (value, label, n, av) => h('button', { class: 'chip' + (state.owner === value ? ' on' : '') + (av ? '' : ' noav'),
-      onclick: () => { state.owner = value; state.page = 1; drawChips(); load(); } },
+      onclick: () => { state.owner = value; state.page = 1; drawChips(); drawWork(); load(); } },
       av ? avatar(label, 22) : null, label, h('span', { class: 'n' }, `(${(n || 0).toLocaleString()})`));
     fill(chips, h('span', { class: 'muted', style: 'margin-right:2px' }, icon('users', 15)),
       chip('', 'All', facets.total),
@@ -126,20 +164,27 @@ export async function render(root, ctx) {
   const pager = h('div', { class: 'pager' });
 
   root.replaceChildren(
-    h('div', { class: 'page-head' }, h('h1', null, 'Leads')),
-    kpis, h('div', { class: 'card' }, toolbar, chipbar, bulk, tableWrap, pager));
+    h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Leads'), h('div', { class: 'muted' }, 'Search, filter and edit every lead. Follow-ups, research and engagement all happen here. Plan shows your targets and tasks.'))),
+    kpis, h('div', { class: 'card' }, toolbar, chipbar, workbar, panel, bulk, tableWrap, pager));
 
   let data = { rows: [], total: 0 };
 
   async function refresh() { // reload counts + list after any edit
     const [f, t, k] = await Promise.all([api('GET', '/api/leads/facets'), api('GET', '/api/activity/tabs'), api('GET', '/api/kpi')]);
     Object.assign(facets, f); Object.assign(tabs, t); Object.assign(kpiData, k);
-    drawKpis(); drawChips(); drawToggles();
+    drawKpis(); drawChips(); drawToggles(); drawWork();
     await load();
   }
 
   async function load() {
     savePrefs();
+    const special = state.work === '_follow' || state.work === '_stale';
+    toolbar.style.display = special ? 'none' : ''; tableWrap.style.display = special ? 'none' : ''; pager.style.display = special ? 'none' : ''; panel.style.display = special ? '' : 'none';
+    if (special) {
+      bulk.style.display = 'none';
+      try { await renderFollowups(fuBody, ctx, { assignee: assignee(), view: state.work === '_stale' ? 'stale' : 'queue', onChange: () => { drawWork(); load(); } }); } catch (e) { toast(e.message, true); }
+      return;
+    }
     data = await api('GET', '/api/leads?' + qs(state));
     toolbar.querySelector('#count').textContent = `${data.total.toLocaleString()} match`;
     drawTable(); drawPagerNow(); drawBulk();
@@ -220,7 +265,6 @@ export async function render(root, ctx) {
         // quick-log buttons
         const liBtn = h('button', { class: 'ib li', title: 'Log a LinkedIn action', onclick: () => openMenu(liBtn, 'LinkedIn action', linkedinTypes.map((t) => ({ icon: TYPE_ICON[t], label: typeLabels[t], run: () => quickLog(l, t) }))) }, icon('linkedin', 14));
         const logBtns = h('div', { class: 'ibs' },
-          h('button', { class: 'ib call', title: 'Log a call', onclick: () => quickLog(l, 'call') }, icon('phone', 14)),
           h('button', { class: 'ib mail', title: 'Log an email', onclick: () => quickLog(l, 'email') }, icon('mail', 14)),
           liBtn,
           h('button', { class: 'ib cal', title: 'Meeting / note…', onclick: open }, icon('calendar', 14)),
@@ -231,10 +275,11 @@ export async function render(root, ctx) {
           } }, icon('trash', 14)) : null);
 
         const due = l.next_action_date && l.next_action_date <= today;
-        const tr = h('tr', { class: selected.has(l.id) ? 'sel' : '' },
+        const tr = h('tr', { class: (selected.has(l.id) ? 'sel ' : '') + 'wr ' + (WORK_TAG[l.work]?.[1] || '') },
           h('td', null, cb),
           h('td', null, h('div', { class: 'leadcell' }, avatar(fullName(l), 32),
-            h('div', null, h('a', { class: 'nm', onclick: open }, fullName(l)), h('div', { class: 'sub' }, l.title), where ? h('div', { class: 'sub' }, where) : null))),
+            h('div', null, h('a', { class: 'nm', onclick: open }, fullName(l)), h('div', { class: 'sub' }, l.title), where ? h('div', { class: 'sub' }, where) : null,
+              WORK_TAG[l.work] ? h('div', { style: 'margin-top:4px' }, h('span', { class: 'wtag ' + WORK_TAG[l.work][1] }, WORK_TAG[l.work][0]), due && !['meeting', 'nurture', 'declined', 'notfit'].includes(l.work) ? h('span', { class: 'wtag red', style: 'margin-left:4px' }, 'Due') : null) : null))),
           h('td', { class: 'company' }, h('div', { class: 'nm' }, l.company), h('div', { class: 'sub' }, [l.industry, l.employees ? `${l.employees} emp` : ''].filter(Boolean).join(' · ')),
             l.source ? h('div', { style: 'margin-top:4px' }, h('span', { class: 'srcpill', title: l.source }, l.source)) : null),
           h('td', null,
@@ -304,6 +349,6 @@ export async function render(root, ctx) {
 
   perSel.value = String(state.limit); syncSort();
   stageSel.value = state.stage; qualSel.value = state.quality; srcSel.value = state.source;
-  drawKpis(); drawChips(); drawToggles();
+  drawKpis(); drawChips(); drawToggles(); drawWork();
   await load();
 }

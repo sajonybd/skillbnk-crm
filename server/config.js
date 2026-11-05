@@ -64,6 +64,9 @@ export const MEETING_STATUSES = { booked: 'Booked', completed: 'Completed', canc
 export const MEETING_TYPES = ['meeting_booked', 'meeting_completed', 'meeting_cancelled', 'meeting_rescheduled'];
 
 // Weekly KPI: meetings each member must book per week. Admin can change it per person in the Meetings page.
+// From this Dhaka hour on, the Plan and the daily work plan report open on the next working day.
+export const PLAN_SWITCH_HOUR = Number(process.env.PLAN_SWITCH_HOUR || 18);
+
 export const DEFAULT_WEEKLY_MEETING_TARGET = Number(process.env.WEEKLY_MEETING_TARGET || 8);
 
 // Resource links that can be attached to a lead.
