@@ -1,0 +1,30 @@
+# Render Blueprint: one web service with a persistent disk (the SQLite database lives on the disk).
+services:
+  - type: web
+    name: skillbnk-crm
+    runtime: node
+    plan: starter            # a persistent disk needs a paid instance
+    region: singapore        # closest to Dhaka; change if you prefer
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    disk:
+      name: crm-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /var/data
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false          # asked for when you create the blueprint
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: TEAM_PASSWORD
+        sync: false

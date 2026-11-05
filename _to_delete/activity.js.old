@@ -1,0 +1,88 @@
+import { api, qs } from '../api.js';
+import { h, fill, options, fmtDateTime, toast } from '../util.js';
+import { openLead } from './lead-drawer.js';
+
+const state = { range: 'today', from: '', to: '', user: '', type: '' };
+const PAGE = 100;
+
+export async function render(root, ctx) {
+  const { ranges, typeLabels } = ctx.config;
+  const users = ctx.users;
+
+  const rangeSel = h('select', { value: state.range, onchange: () => { state.range = rangeSel.value; syncCustom(); load(); } }, options(ranges));
+  const from = h('input', { type: 'date', value: state.from, onchange: () => { state.from = from.value; load(); } });
+  const to = h('input', { type: 'date', value: state.to, onchange: () => { state.to = to.value; load(); } });
+  const custom = h('span', { class: 'row' }, from, '→', to);
+  const userSel = h('select', { value: state.user, onchange: () => { state.user = userSel.value; load(); } },
+    options(users.map((u) => [u.id, u.name]), { blank: 'Everyone' }));
+  const typeSel = h('select', { value: state.type, onchange: () => { state.type = typeSel.value; load(); } },
+    options(Object.entries(typeLabels), { blank: 'All activity types' }));
+  const meBtn = h('button', { class: 'btn', onclick: () => { state.user = String(ctx.user.id); userSel.value = state.user; load(); } }, 'Just me');
+
+  function syncCustom() { custom.style.display = state.range === 'custom' ? '' : 'none'; }
+  syncCustom();
+
+  const summaryBox = h('div', { class: 'card', style: 'margin-bottom:16px;overflow-x:auto' });
+  const feedBox = h('div', { class: 'card' });
+  const caption = h('span', { class: 'muted' });
+
+  root.replaceChildren(
+    h('div', { class: 'page-head' }, h('h1', null, 'Activity'), h('div', { class: 'spacer' }), caption),
+    h('div', { class: 'row', style: 'margin-bottom:14px' }, rangeSel, custom, userSel, typeSel, meBtn),
+    summaryBox, feedBox);
+
+  let rows = [];
+  let total = 0;
+
+  async function fetchPage(offset) {
+    return api('GET', '/api/activity?' + qs({ ...state, limit: PAGE, offset }));
+  }
+
+  async function load() {
+    try {
+      const d = await fetchPage(0);
+      rows = d.rows; total = d.total;
+      drawSummary(d.summary);
+      drawFeed();
+      caption.textContent = d.bounds
+        ? `${fmtDateTime(d.bounds.start)} → ${fmtDateTime(new Date(new Date(d.bounds.end) - 1).toISOString())}`
+        : 'All time';
+    } catch (e) { toast(e.message, true); }
+  }
+
+  function drawSummary(summary) {
+    if (summary.length === 0) { summaryBox.replaceChildren(h('div', { class: 'empty' }, 'No activity in this period.')); return; }
+    const cols = ['call', 'email', 'linkedin', 'meeting', 'note', 'stage_change', 'quality_change', 'assign'];
+    const sum = (k) => summary.reduce((n, s) => n + (s.types[k] || 0), 0);
+    summaryBox.replaceChildren(h('table', { class: 'summary' },
+      h('thead', null, h('tr', null, h('th', null, 'Team member'), h('th', null, 'Leads worked'),
+        cols.map((c) => h('th', null, typeLabels[c])), h('th', null, 'Total'))),
+      h('tbody', null,
+        summary.map((s) => h('tr', null, h('td', null, h('b', null, s.user_name)), h('td', null, s.leads),
+          cols.map((c) => h('td', { class: s.types[c] ? '' : 'muted' }, s.types[c] || '·')), h('td', null, h('b', null, s.total)))),
+        summary.length > 1 ? h('tr', null, h('td', null, h('b', null, 'Team')), h('td', null, ''),
+          cols.map((c) => h('td', null, sum(c) || '·')), h('td', null, h('b', null, total))) : null)));
+  }
+
+  function drawFeed() {
+    if (rows.length === 0) { feedBox.replaceChildren(); return; }
+    const more = rows.length < total
+      ? h('div', { class: 'pager' }, h('button', { class: 'btn small', onclick: async () => {
+          const d = await fetchPage(rows.length);
+          rows = rows.concat(d.rows);
+          drawFeed();
+        } }, `Load more (${total - rows.length} left)`)) : null;
+    fill(feedBox,
+      h('div', { class: 'tablewrap' }, h('table', { class: 'feed' },
+        h('thead', null, h('tr', null, h('th', null, 'When'), h('th', null, 'Who'), h('th', null, 'Type'), h('th', null, 'Lead'), h('th', null, 'Detail'))),
+        h('tbody', null, rows.map((r) => h('tr', { class: 'clickable', onclick: () => openLead(r.lead_id, ctx, load) },
+          h('td', { class: 'when' }, fmtDateTime(r.created_at)),
+          h('td', null, r.user_name),
+          h('td', null, h('span', { class: 'pill' }, typeLabels[r.type] || r.type)),
+          h('td', null, h('div', null, r.lead_name || '(no name)'), h('div', { class: 'sub' }, r.lead_company)),
+          h('td', null, r.note)))))),
+      more);
+  }
+
+  await load();
+}
