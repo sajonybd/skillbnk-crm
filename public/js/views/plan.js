@@ -60,10 +60,9 @@ export async function render(root, ctx) {
           tile(`${s.tasks_done}/${s.tasks}`, 'team tasks'),
           tile(tgtPct == null ? '–' : tgtPct + '%', 'daily target'),
           tile(m.responses.counts.replied, 'replies waiting', m.responses.counts.replied ? 'hot' : ''))),
-      workplan(m, d),
       h('div', { class: 'plan-cols' },
-        h('div', { class: 'plan-main' }, tasks(m, d), responses(m)),
-        h('div', { class: 'plan-side' }, targets(m, d), achieved(m))),
+        h('div', { class: 'plan-main' }, workplan(m, d), responses(m)),
+        h('div', { class: 'plan-side' }, targets(m, d), tasks(m, d), achieved(m))),
       h('div', { class: 'muted', style: 'margin-top:10px' }, 'Follow-ups, research and engagement are on the ', h('a', { href: '#/leads' }, 'Leads'), ' page.'));
   }
 
@@ -76,7 +75,7 @@ export async function render(root, ctx) {
       toast('Work plan copied. Paste it anywhere.');
     };
     const doc = renderMd(it.md.split('\n').slice(1).join('\n'));
-    return h('div', { class: 'card pcard', style: 'margin-bottom:12px' },
+    return h('div', { class: 'card pcard' },
       h('div', { class: 'pc-title' }, icon('listCheck', 16), h('h3', null, 'Work plan'), h('div', { class: 'spacer' }), h('button', { class: 'btn', onclick: copy }, icon('inbox', 15), 'Copy')),
       doc);
   }

@@ -688,3 +688,9 @@ td, th { padding-left: 9px; padding-right: 9px; }
 .page-head .seg { padding: 4px; gap: 4px; }
 .page-head .seg button, .page-head .segb { padding: 7px 20px; font-size: 13.5px; }
 @media (max-width: 600px) { .page-head .seg button, .page-head .segb { padding: 6px 14px; } }
+
+/* Plan page: work plan on the left, targets / team tasks / achieved on the right */
+.plan-member .pcard .rep-doc { border: 0; padding: 0; max-width: none; border-radius: 0; background: none; }
+.plan-member .pcard .rep-doc h2:first-child { margin-top: 4px; }
+.plan-side .ach th, .plan-side .ach td { padding-left: 3px; padding-right: 3px; }
+.plan-side .ach thead th { font-size: 10px; letter-spacing: 0; }
