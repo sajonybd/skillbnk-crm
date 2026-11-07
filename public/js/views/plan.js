@@ -2,6 +2,7 @@ import { api, qs } from '../api.js';
 import { h, fill, toast, avatar, asUrl, pref } from '../util.js';
 import { openLead } from './lead-drawer.js';
 import { icon } from '../icons.js';
+import { renderMd } from './reports.js';
 
 // The daily plan: what each person has to do (and exactly which action to take on each lead),
 // how leads are responding, and what was achieved. After 6 pm it opens on the next working day.
@@ -23,6 +24,10 @@ export async function render(root, ctx) {
     pref.set(ctx.user.id, 'plan.assignee', state.assignee); pref.set(ctx.user.id, 'plan.view', state.view);
     try {
       const d = await api('GET', '/api/plan?' + qs({ day: state.day, assignee: state.assignee }));
+      try {
+        const wp = await api('GET', '/api/reports/plan?' + qs({ assignee: state.assignee || (isAdmin ? 'all' : 'me'), date: d.date }));
+        d._wp = Object.fromEntries((wp.items || []).map((x) => [x.user_id, x]));
+      } catch { d._wp = {}; }
       draw(d);
       if (keepScroll) window.scrollTo(0, y);
     } catch (e) { toast(e.message, true); }
@@ -55,10 +60,25 @@ export async function render(root, ctx) {
           tile(`${s.tasks_done}/${s.tasks}`, 'team tasks'),
           tile(tgtPct == null ? '–' : tgtPct + '%', 'daily target'),
           tile(m.responses.counts.replied, 'replies waiting', m.responses.counts.replied ? 'hot' : ''))),
+      workplan(m, d),
       h('div', { class: 'plan-cols' },
         h('div', { class: 'plan-main' }, tasks(m, d), responses(m)),
         h('div', { class: 'plan-side' }, targets(m, d), achieved(m))),
       h('div', { class: 'muted', style: 'margin-top:10px' }, 'Follow-ups, research and engagement are on the ', h('a', { href: '#/leads' }, 'Leads'), ' page.'));
+  }
+
+  // The same work plan as Reports → Daily work plan (copy leaves the tables out).
+  function workplan(m, d) {
+    const it = (d._wp || {})[m.user_id || m.id];
+    if (!it) return null;
+    const copy = async () => {
+      try { await navigator.clipboard.writeText(it.copy); } catch { const t = h('textarea', { style: 'position:fixed;opacity:0' }); t.value = it.copy; document.body.append(t); t.select(); document.execCommand('copy'); t.remove(); }
+      toast('Work plan copied. Paste it anywhere.');
+    };
+    const doc = renderMd(it.md.split('\n').slice(1).join('\n'));
+    return h('div', { class: 'card pcard', style: 'margin-bottom:12px' },
+      h('div', { class: 'pc-title' }, icon('listCheck', 16), h('h3', null, 'Work plan'), h('div', { class: 'spacer' }), h('button', { class: 'btn', onclick: copy }, icon('inbox', 15), 'Copy')),
+      doc);
   }
 
   // ── side panels ────────────────────────────────────────────────────────────

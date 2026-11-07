@@ -13,7 +13,7 @@ if (state.sort === 'first_name') state.sort = 'name';
 const SORTS = [
   ['work', 'Work order (next action)', 'asc'], ['updated_at', 'Recently updated', 'desc'], ['created_at', 'Date imported', 'desc'], ['name', 'Name', 'asc'],
   ['company', 'Company', 'asc'], ['owner', 'Owner', 'asc'], ['stage', 'Stage (pipeline order)', 'asc'],
-  ['quality', 'Quality', 'asc'], ['last_activity_at', 'Last activity', 'desc'], ['touches', 'Most touched', 'desc'],
+  ['quality', 'Lead type', 'asc'], ['last_activity_at', 'Last activity', 'desc'], ['touches', 'Most touched', 'desc'],
   ['next_action_date', 'Next action date', 'asc'], ['meeting_date', 'Meeting date', 'asc'],
 ];
 const selected = new Set();
@@ -109,7 +109,7 @@ export async function render(root, ctx) {
   const WORK_TABS = [['', 'All', 'all'], ['_follow', 'Follow-ups due', 'red'], ['research', 'To research', 'amber'], ['engage', 'To engage', 'blue'], ['waiting', 'Waiting', 'grey'], ['meeting', 'Meeting booked', 'green'], ['parked', 'Parked', 'mute']];
   const WORK_HINT = {
     _follow: 'Do these today, from the top: replies first, then due, then late. Type what you wrote, then press the button.',
-    research: 'Open the Web, Co and LI links, then set the lead type in the Quality column. Not a Fit: write the reason in the lead.',
+    research: 'Open the Web, Co and LI links, then set the lead type in the Lead type column. Not a Fit: write the reason in the lead.',
     engage: 'Real fits, no invite yet. Like, comment, follow (LinkedIn icon), then log Connection request or InMail. Connect starts the 7-day follow-up.',
     waiting: 'Invite sent or messaged. Nothing to do until the next step is due (it then appears under Follow-ups due).',
     meeting: 'A meeting is booked. Prepare and run it (Meetings page).',

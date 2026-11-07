@@ -37,7 +37,7 @@ export function reportRoutes(db) {
 
   const acts = (uid, from, to) => db.prepare(
     `SELECT a.type, a.note, a.meta, a.created_at, l.id AS lead_id, l.first_name, l.last_name, l.company, l.outreach_status, l.first_dm_date, l.stage, l.quality,
-            l.opportunity_path, l.denial_reason, l.assessment, l.why_in_pipeline
+            l.denial_reason, l.assessment, l.why_in_pipeline
      FROM activities a JOIN leads l ON l.id = a.lead_id
      WHERE a.user_id = ? AND l.deleted_at = '' AND date(a.created_at, '${shift}') BETWEEN ? AND ? ORDER BY a.created_at`
   ).all(uid, from, to);
@@ -52,9 +52,9 @@ export function reportRoutes(db) {
       if (a.type === 'quality_change' && m.to !== undefined) {
         const bad = m.to === 'Not a Fit';
         if (!m.to) continue;
-        out.push({ lead: a, verdict: bad ? 'NOT A FIT' : 'QUALIFIED', fit: bad ? '–' : clean(a.opportunity_path) || m.to, reason: reason || (bad ? 'No reason written. Add one in the lead' : '–') });
+        out.push({ lead: a, verdict: bad ? 'NOT A FIT' : 'QUALIFIED', fit: bad ? '–' : m.to, reason: reason || (bad ? 'No reason written. Add one in the lead' : '–') });
       } else if (a.type === 'response_change' && ['NUTR', 'NI'].includes(m.to)) {
-        out.push({ lead: a, verdict: m.to === 'NI' ? 'NOT INTERESTED' : 'NURTURE', fit: clean(a.opportunity_path) || '–', reason: reason || '–' });
+        out.push({ lead: a, verdict: m.to === 'NI' ? 'NOT INTERESTED' : 'NURTURE', fit: clean(a.quality) || '–', reason: reason || '–' });
       }
     }
     return out;
@@ -64,6 +64,7 @@ export function reportRoutes(db) {
   function planMd(u, date, today) {
     const [m] = planMembers(db, { date, today, picked: [u] });
     const L = [`# Daily Work Plan: ${u.name}`, `**Date:** ${longDate(date)}${isWorkingDay(date) ? '' : ' (day off)'}`, ''];
+    const T = []; // tables go at the bottom of the report and are left out when it is copied
     const meets = db.prepare(
       `SELECT mt.scheduled_time, mt.notes, mt.status, l.first_name, l.last_name, l.company FROM meetings mt JOIN leads l ON l.id = mt.lead_id
        WHERE l.deleted_at = '' AND mt.scheduled_date = ? AND mt.status = 'booked' AND (l.owner_id = ? OR mt.booked_by = ?) ORDER BY mt.scheduled_time`
@@ -85,26 +86,33 @@ export function reportRoutes(db) {
     L.push('## Follow-ups & pipeline');
     if (!m.actions.length) L.push('- Nothing is due.');
     else {
-      L.push(`${m.summary.actions} lead action${m.summary.actions === 1 ? '' : 's'} due; ${m.summary.shown} planned for the day${m.summary.carry_over ? `, ${m.summary.carry_over} carry over` : ''}.`, '');
+      L.push(`**${m.summary.actions}** lead action${m.summary.actions === 1 ? '' : 's'} due; **${m.summary.shown}** planned for the day${m.summary.carry_over ? `, **${m.summary.carry_over}** carry over` : ''}.`, '');
       L.push(...Object.entries(byKind).map(([k, n]) => `- ${k}: **${n}**`), '');
-      L.push(table(['#', 'Prospect', 'Action', 'Why', 'Due'], m.actions.map((a, i) => [i + 1, who(a) + (a.pursue ? ' [PURSUE]' : ''), a.verb, a.reason, a.late_days > 0 ? `${a.late_days}d late` : 'due'])));
+      T.push('## Follow-up list', table(['#', 'Prospect', 'Action', 'Why', 'Due'], m.actions.map((a, i) => [i + 1, who(a) + (a.pursue ? ' [PURSUE]' : ''), a.verb, a.reason, a.late_days > 0 ? `${a.late_days}d late` : 'due'])), '');
     }
-    if (m.summary.stale) L.push('', `> ${m.summary.stale} stale leads (14+ days late) are waiting to be closed or moved to nurture.`);
+    if (m.summary.stale) L.push(`> ${m.summary.stale} stale leads (14+ days late) are waiting to be closed or moved to nurture.`);
     L.push('');
 
     L.push('## Operations & team tasks');
-    L.push(...(tasks.length ? tasks.map((t, i) => `${i + 1}. ${t.window ? '**' + t.window + '** ' : ''}${t.title}${t.expected ? ': ' + t.expected : ''}`) : ['- No scheduled tasks.']), '');
+    const boldNums = (x) => String(x).replace(/\*\*/g, '').replace(/\d+(?:[-–]\d+)?%?/g, (n) => `**${n}**`);
+    L.push(...(tasks.length ? tasks.map((t) => `- ${t.window ? '**' + t.window + '** ' : ''}${boldNums(t.title)}${t.expected ? ': ' + boldNums(t.expected) : ''}`) : ['- No scheduled tasks.']), '');
 
-    if (meets.length) L.push('## Meetings', table(['Time', 'Prospect', 'Notes'], meets.map((x) => [x.scheduled_time || '–', who(x), x.notes])), '');
-    return L.join('\n');
+    if (meets.length) {
+      L.push('## Meetings', ...meets.map((x) => `- ${x.scheduled_time || 'Time not set'}: ${who(x)}${x.notes ? ' (' + x.notes + ')' : ''}`), '');
+      T.push('## Meetings table', table(['Time', 'Prospect', 'Notes'], meets.map((x) => [x.scheduled_time || '–', who(x), x.notes])), '');
+    }
+    // WhatsApp copy: single * for bold, operations tasks as "* " bullets, no tables.
+    const wa = L.join('\n').replace(/\*\*/g, '*').replace(/^# (.+)$/gm, '# *$1*').replace(/^## Operations & team tasks$/m, '## *Operations & team tasks*')
+      .replace(/(## \*Operations & team tasks\*\n)([\s\S]*?)(\n\n|$)/, (_, a, b, c) => a + b.replace(/^- /gm, '* ') + c);
+    return { md: [...L, ...T].join('\n'), copy: wa };
   }
 
   r.get('/plan', (req, res) => {
     const today = todayLocal();
     const date = DATE_RE.test(req.query.date || '') ? req.query.date : dhakaHour() >= PLAN_SWITCH_HOUR ? nextWorkingDay(today) : today;
     const { picked } = pickPeople(req);
-    const md = picked.map((u) => planMd(u, date, today)).join('\n\n---\n\n');
-    res.json({ kind: 'plan', title: `Daily Work Plan ${date}`, date, markdown: md });
+    const items = picked.map((u) => ({ user_id: u.id, name: u.name, ...planMd(u, date, today) }));
+    res.json({ kind: 'plan', title: `Daily Work Plan ${date}`, date, markdown: items.map((x) => x.md).join('\n\n---\n\n'), copy: items.map((x) => x.copy).join('\n\n---\n\n'), items });
   });
 
   // ── End-of-day update ──────────────────────────────────────────────────────

@@ -41,7 +41,7 @@ export function mapVerdict(raw) {
   const out = { verdict: v.toUpperCase().startsWith('QUALIFIED (PARTNER') ? 'QUALIFY (partner)' : v };
   if (k === 'skip' || k === 'not qualified') out.quality = 'Not a Fit';
   if (k === 'nurture') out.outreach_status = 'NUTR';
-  if (k.includes('(partner)')) out.opportunity_path = 'Strategic Partnership';
+  if (k.includes('(partner)')) out.quality = 'Strategic Partnership';
   return out;
 }
 

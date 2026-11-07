@@ -4,7 +4,7 @@ import { analyze, buildLeads, dedupeKey, IMPORT_FIELDS } from '../lib/importer.j
 import { findExisting } from '../lib/leadkey.js';
 import { createPlaceholderUser } from './team.js';
 import { createMeeting } from '../lib/meetings.js';
-import { TEAM, LEAD_CATEGORIES, TIERS, OUTREACH_STATUSES, CHANNELS, OPPORTUNITY_PATHS } from '../config.js';
+import { TEAM, LEAD_CATEGORIES, TIERS, OUTREACH_STATUSES, CHANNELS } from '../config.js';
 import { parseMeetings, parseActivityLog, dayOf } from '../lib/sheet-sync.js';
 import { logActivity } from '../db.js';
 
@@ -12,11 +12,11 @@ const COLS = [
   'first_name', 'last_name', 'title', 'company', 'email', 'email_status', 'phone', 'linkedin',
   'company_linkedin', 'website', 'employees', 'industry', 'city', 'state', 'country', 'source',
   'icp_segment', 'stage', 'quality', 'next_action', 'next_action_date', 'notes', 'apollo_id',
-  'lead_category', 'tier', 'outreach_status', 'channel', 'opportunity_path', 'problem_pool', 'why_in_pipeline',
+  'lead_category', 'tier', 'outreach_status', 'channel', 'problem_pool', 'why_in_pipeline',
   'todays_question', 'denial_reason', 'assessment', 'invite_sent_date', 'accepted_date', 'first_dm_date',
 ];
 // Dropdown-type fields: a value that is not in the allowed list is dropped rather than stored.
-const ENUMS = { lead_category: LEAD_CATEGORIES, tier: TIERS, outreach_status: Object.keys(OUTREACH_STATUSES), channel: CHANNELS, opportunity_path: OPPORTUNITY_PATHS };
+const ENUMS = { lead_category: LEAD_CATEGORIES, tier: TIERS, outreach_status: Object.keys(OUTREACH_STATUSES), channel: CHANNELS };
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 // Accepts 2026-11-05 or any date text JS can read ("Nov 5, 2026"); returns YYYY-MM-DD or ''.

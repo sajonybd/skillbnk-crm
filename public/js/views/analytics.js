@@ -55,12 +55,12 @@ export async function render(root, ctx) {
       const { counts: c, rates: r, byPath } = await api('GET', '/api/leads/funnel?' + qs({ owner: state.user }));
       const pct = (v) => (v == null ? '—' : v + '%');
       const step = (label, n, note) => h('div', { class: 'metric' }, h('div', { class: 'muted' }, label), h('div', { style: 'font-size:22px;font-weight:600' }, n.toLocaleString()), note ? h('div', { class: 'muted' }, note) : null);
-      const paths = Object.entries(byPath).filter(([k]) => k).map(([k, n]) => `${k}: ${n}`).join(' · ') || 'No opportunity paths set yet';
+      const paths = Object.entries(byPath).filter(([k]) => k).map(([k, n]) => `${k}: ${n}`).join(' · ') || 'No lead types set yet';
       fill(funnelBox, h('h3', null, 'Outreach funnel (all time)'),
         h('div', { class: 'metrics' },
           step('Researched', c.researched), step('Invited', c.invited), step('Accepted', c.accepted, 'Acceptance ' + pct(r.acceptance)),
           step('First DM', c.firstDm), step('Replied', c.replied, 'Reply ' + pct(r.reply)), step('Meetings', c.meetings, 'Of replies ' + pct(r.meeting))),
-        h('div', { class: 'muted', style: 'margin-top:8px' }, 'Opportunity paths — ' + paths));
+        h('div', { class: 'muted', style: 'margin-top:8px' }, 'Lead types — ' + paths));
     } catch (e) { toast(e.message, true); }
   }
 

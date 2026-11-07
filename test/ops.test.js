@@ -141,7 +141,7 @@ test('reports: end-of-day lists what was sent, with text, and research verdicts 
   await call('POST', `/api/leads/${a.id}/step`, { result: 'comment', note: 'Loved your point on spaced practice' });
   await call('POST', `/api/leads/${a.id}/step`, { result: 'sent', kind: 'first_message', note: 'Hi Rita, quick question about your cohorts' });
   await call('PATCH', `/api/leads/${b.id}`, { quality: 'Not a Fit', denial_reason: 'Solo operator, no training budget' });
-  await call('PATCH', `/api/leads/${c.id}`, { quality: 'Discovery Meeting', opportunity_path: 'Direct skillBNK Customer', assessment: 'PURSUE: 60+ staff, runs academy' });
+  await call('PATCH', `/api/leads/${c.id}`, { quality: 'Direct skillBNK Customer', assessment: 'PURSUE: 60+ staff, runs academy' });
   const r = await call('GET', '/api/reports/eod?assignee=me');
   assert.equal(r.status, 200);
   const md = r.markdown;

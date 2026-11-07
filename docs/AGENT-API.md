@@ -24,7 +24,7 @@ A key works for the same things its owner can do. Use the admin's key if the age
 | Search leads | `GET /api/leads?q=name&owner=<id>&limit=50&page=1` |
 | One lead with history | `GET /api/leads/<id>` |
 | Add a lead (merges if it exists) | `POST /api/leads` with `first_name, last_name, company, title, email, linkedin, ...` |
-| Edit a lead | `PATCH /api/leads/<id>` with any fields: `tier, quality, opportunity_path, assessment, denial_reason, outreach_status, owner_id, next_action, next_action_date, ...` |
+| Edit a lead | `PATCH /api/leads/<id>` with any fields: `tier, quality (the lead type; old opportunity_path is accepted as an alias), assessment, denial_reason, outreach_status, owner_id, next_action, next_action_date, ...` |
 | Record the result of a planned step | `POST /api/leads/<id>/step` with `{ "result": "sent", "kind": "followup", "note": "<text sent>" }` |
 | Log any activity | `POST /api/leads/<id>/activities` with `{ "type": "linkedin_comment", "note": "<text>" }` |
 | Book a meeting | `POST /api/leads/<id>/meetings` with `{ "scheduled_date": "2026-11-10", "scheduled_time": "15:00", "booked_by": <user id>, "notes": "..." }` |

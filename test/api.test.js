@@ -499,9 +499,9 @@ test('outreach funnel: dropdown validation, auto dates, funnel counts', async ()
   assert.equal(bad.status, 400);
   const bad2 = await call('PATCH', `/api/leads/${id}`, { outreach_status: 'XX' });
   assert.equal(bad2.status, 400);
-  const ok = await call('PATCH', `/api/leads/${id}`, { lead_category: 'Customer', tier: 'A', opportunity_path: 'Strategic Partnership', todays_question: 'How do you track learners?' });
+  const ok = await call('PATCH', `/api/leads/${id}`, { lead_category: 'Customer', tier: 'A', quality: 'Strategic Partnership', todays_question: 'How do you track learners?' });
   assert.equal(ok.status, 200);
-  assert.equal(ok.lead.opportunity_path, 'Strategic Partnership');
+  assert.equal(ok.lead.quality, 'Strategic Partnership');
 
   await call('POST', `/api/leads/${id}/activities`, { type: 'linkedin_connect' });
   let l = (await call('GET', `/api/leads/${id}`)).lead;

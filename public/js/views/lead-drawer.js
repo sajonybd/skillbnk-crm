@@ -88,7 +88,7 @@ export async function openLead(id, ctx, onChange = () => {}) {
   // A lead in the recycle bin is read-only: restore it (or delete it forever) first.
   function drawTrashed(l, acts, meetings = [], links = []) {
     const admin = ctx.user.role === 'admin';
-    const facts = [['Email', l.email], ['Phone', l.phone], ['Title', l.title], ['Company', l.company], ['Owner when deleted', l.owner_name], ['Stage', l.stage], ['Quality', l.quality], ['Source', l.source]]
+    const facts = [['Email', l.email], ['Phone', l.phone], ['Title', l.title], ['Company', l.company], ['Owner when deleted', l.owner_name], ['Stage', l.stage], ['Lead type', l.quality], ['Source', l.source]]
       .filter(([, v]) => v);
     drawer.replaceChildren(
       h('div', { class: 'drawer-head' },
@@ -213,7 +213,7 @@ export async function openLead(id, ctx, onChange = () => {}) {
     const field = (label, input, full) => h('div', { class: 'field' + (full ? ' full' : '') }, h('label', null, label), input);
 
     // ── outreach (funnel + assessment); each control saves on change ──
-    const { leadCategories = [], tiers = [], outreachStatuses = {}, channels = [], opportunityPaths = [] } = ctx.config;
+    const { leadCategories = [], tiers = [], outreachStatuses = {}, channels = [] } = ctx.config;
     const dd = (key, list, blank) => {
       const s = h('select', { onchange: () => save({ [key]: s.value }) }, options(list, { blank }));
       s.value = l[key] || '';
@@ -235,8 +235,7 @@ export async function openLead(id, ctx, onChange = () => {}) {
         field('Why in pipeline', txt('why_in_pipeline', 'One line: why this person'), true),
         field("Today's question", txt('todays_question', 'The one question to ask'), true),
         field('Denial reason', txt('denial_reason', 'If they said no, why'), true),
-        field('Opportunity assessment (after research)', txt('assessment', 'Table summary, key distinction, recommended reply', 4), true),
-        field('Opportunity path (owner decides)', dd('opportunity_path', opportunityPaths, 'Not decided'), true)));
+        field('Opportunity assessment (after research)', txt('assessment', 'Table summary, key distinction, recommended reply', 4), true)));
 
 
     // ── details (explicit save) ──
@@ -296,7 +295,7 @@ export async function openLead(id, ctx, onChange = () => {}) {
       h('section', null, h('h3', null, 'Pipeline'),
         h('div', { class: 'grid2' },
           field('Owner', owner), field('Stage', stage),
-          field('Quality / category', quality), field('', h('span')),
+          field('Lead type', quality), field('', h('span')),
           field('Next action', nextAction), field('Next action date', nextDate))),
       outreachSection,
       meetingsSection(l, meetings),

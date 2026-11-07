@@ -30,6 +30,8 @@ export const QUALITIES = [
   'Strategic Partnership',
   'AI Video Content Tool',
   'AI Agent Tool',
+  'Custom Platform Development',
+  'Relationship Building Only',
   'Not a Fit',
 ];
 
@@ -121,12 +123,9 @@ export const TIERS = ['A', 'B', 'C'];
 // Outreach status codes: U unseen, SNR seen no reply, NI not interested, R replied, M meeting booked, NUTR nurture
 export const OUTREACH_STATUSES = { U: 'U · Unseen', SNR: 'SNR · Seen, no reply', NI: 'NI · Not interested', R: 'R · Replied', M: 'M · Meeting booked', NUTR: 'NUTR · Nurture' };
 export const CHANNELS = ['LinkedIn', 'Email', 'Both'];
-// Set by the owner after the post-research opportunity assessment (Section 42).
-export const OPPORTUNITY_PATHS = [
-  'Direct skillBNK Customer', 'Strategic Partnership', 'Discovery Meeting',
-  'AI Video / Content Tool', 'AI Agent / Automation Tool', 'Custom Platform Development',
-  'Relationship Building Only', 'No Opportunity',
-];
+// Old "Opportunity path" values (field removed: Quality is the one lead type). Used to read old data and old API/import calls.
+const LEGACY_PATHS = { 'AI Video / Content Tool': 'AI Video Content Tool', 'AI Agent / Automation Tool': 'AI Agent Tool', 'No Opportunity': 'Not a Fit' };
+export const legacyPathToQuality = (v) => { const t = String(v || '').trim(); return LEGACY_PATHS[t] || (QUALITIES.includes(t) ? t : ''); };
 // New lead fields: text columns, and the date columns that the log fills in automatically.
-export const OUTREACH_TEXT_FIELDS = ['lead_category', 'tier', 'problem_pool', 'why_in_pipeline', 'todays_question', 'outreach_status', 'denial_reason', 'opportunity_path', 'channel', 'assessment'];
+export const OUTREACH_TEXT_FIELDS = ['lead_category', 'tier', 'problem_pool', 'why_in_pipeline', 'todays_question', 'outreach_status', 'denial_reason', 'channel', 'assessment'];
 export const OUTREACH_DATE_FIELDS = ['invite_sent_date', 'accepted_date', 'first_dm_date'];

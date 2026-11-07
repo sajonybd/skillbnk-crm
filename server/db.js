@@ -147,6 +147,11 @@ export function openDb(file) {
   const have = db.prepare('PRAGMA table_info(leads)').all().map((c) => c.name);
   for (const c of OUTREACH_COLS) if (!have.includes(c)) db.exec(`ALTER TABLE leads ADD COLUMN ${c} TEXT NOT NULL DEFAULT ''`);
   db.exec('CREATE INDEX IF NOT EXISTS idx_leads_ostatus ON leads(outreach_status)');
+  // "Opportunity path" was merged into Quality (one lead type). Copy old values into blank Quality once; the column stays, unused.
+  db.exec(`UPDATE leads SET quality = CASE opportunity_path
+      WHEN 'AI Video / Content Tool' THEN 'AI Video Content Tool' WHEN 'AI Agent / Automation Tool' THEN 'AI Agent Tool'
+      WHEN 'No Opportunity' THEN 'Not a Fit' ELSE opportunity_path END
+    WHERE quality = '' AND opportunity_path != ''`);
   // "Not today": push a lead's next step to a later date without touching its history.
   if (!have.includes('snooze_until')) db.exec("ALTER TABLE leads ADD COLUMN snooze_until TEXT NOT NULL DEFAULT ''");
   // Placeholder text that came from spreadsheets ("null") is not a real next step.

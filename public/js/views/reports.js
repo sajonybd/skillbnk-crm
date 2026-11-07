@@ -84,7 +84,7 @@ export async function render(root, ctx) {
       state.tab === 'weekly' ? input('date', 'from', 'From') : null,
       state.tab === 'weekly' ? input('date', 'to', 'To') : null,
       h('div', { class: 'spacer' }),
-      h('button', { class: 'btn', onclick: async () => { if (current) { try { await navigator.clipboard.writeText(current.markdown); } catch { const t = h('textarea', { style: 'position:fixed;opacity:0' }); t.value = current.markdown; document.body.append(t); t.select(); document.execCommand('copy'); t.remove(); }
+      h('button', { class: 'btn', onclick: async () => { if (current) { try { await navigator.clipboard.writeText(current.copy || current.markdown); } catch { const t = h('textarea', { style: 'position:fixed;opacity:0' }); t.value = current.copy || current.markdown; document.body.append(t); t.select(); document.execCommand('copy'); t.remove(); }
         toast('Report copied. Paste it anywhere.'); } } }, icon('inbox', 15), 'Copy'),
       h('button', { class: 'btn', onclick: () => {
         if (!current) return;

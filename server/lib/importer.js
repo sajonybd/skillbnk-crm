@@ -2,7 +2,7 @@
 // Google Sheets) and maps its columns to lead fields.
 //
 // To teach the importer a new column name, add it to ALIASES below.
-import { STAGES, QUALITIES } from '../config.js';
+import { STAGES, QUALITIES, legacyPathToQuality } from '../config.js';
 import { dedupeKey, hasIdentity } from './leadkey.js';
 import { isNullish, mapStage, mapVerdict } from './sheet-sync.js';
 
@@ -38,7 +38,8 @@ const ALIASES = {
   stage: 'stage', pipelinestage: 'stage',
   quality: 'quality', qualification: 'verdict', verdict: 'verdict',
   leadcategory: 'lead_category', tier: 'tier', outreachstatus: 'outreach_status', channel: 'channel',
-  opportunitypath: 'opportunity_path', problempool: 'problem_pool', whyinpipeline: 'why_in_pipeline', todaysquestion: 'todays_question',
+  opportunitypath: 'opportunity_path', // old column: merged into quality below
+  problempool: 'problem_pool', whyinpipeline: 'why_in_pipeline', todaysquestion: 'todays_question',
   denialreason: 'denial_reason', invitesentdate: 'invite_sent_date', accepteddate: 'accepted_date', firstdmdate: 'first_dm_date',
   meetingdate: 'meeting_date', nextaction: 'next_action', nextactiondate: 'next_action_date',
   notes: 'notes', note: 'notes',
@@ -134,11 +135,12 @@ function toLead(cells, mapping) {
     if (v) {
       if (v.quality && !l.quality) l.quality = v.quality;
       if (v.outreach_status && !l.outreach_status) l.outreach_status = v.outreach_status;
-      if (v.opportunity_path && !l.opportunity_path) l.opportunity_path = v.opportunity_path;
       l.assessment = l.assessment || `Research verdict (from sheet): ${v.verdict}`;
     }
   }
-  if (l.quality && !QUALITIES.includes(l.quality)) delete l.quality;
+  if (l.opportunity_path) { if (!l.quality) l.quality = legacyPathToQuality(l.opportunity_path); delete l.opportunity_path; }
+  if (l.quality && !QUALITIES.includes(l.quality)) l.quality = legacyPathToQuality(l.quality) || undefined;
+  if (!l.quality) delete l.quality;
   // Free-text meeting dates are kept for the meeting parser; next_action_date must be a real date.
   if (l.next_action_date && !/^\d{4}-\d{2}-\d{2}$/.test(l.next_action_date)) delete l.next_action_date;
   return l;

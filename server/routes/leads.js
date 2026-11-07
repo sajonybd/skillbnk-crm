@@ -1,6 +1,6 @@
 import { WORK_CASE, WORK_KEYS, WORK_GROUPS, workOrder } from '../lib/work.js';
 import { Router } from 'express';
-import { STAGES, QUALITIES, MANUAL_TYPES, FIRST_TOUCH_TYPES, COMPANY_VIEW_TYPE, MEETING_TYPES, LINK_KINDS, LEAD_CATEGORIES, TIERS, OUTREACH_STATUSES, CHANNELS, OPPORTUNITY_PATHS } from '../config.js';
+import { STAGES, QUALITIES, MANUAL_TYPES, FIRST_TOUCH_TYPES, COMPANY_VIEW_TYPE, MEETING_TYPES, LINK_KINDS, LEAD_CATEGORIES, TIERS, OUTREACH_STATUSES, CHANNELS, legacyPathToQuality } from '../config.js';
 import { HttpError, logActivity, tx } from '../db.js';
 import { dedupeKey, hasIdentity, findExisting } from '../lib/leadkey.js';
 import { requireAdmin } from '../auth.js';
@@ -24,7 +24,6 @@ const ENUM_FIELDS = {
   tier: TIERS,
   outreach_status: Object.keys(OUTREACH_STATUSES),
   channel: CHANNELS,
-  opportunity_path: OPPORTUNITY_PATHS,
 };
 // Sort keys the UI can ask for. `blank` = rows with an empty value always go last.
 const stageCase = 'CASE l.stage ' + STAGES.map((st, i) => `WHEN '${st}' THEN ${i}`).join(' ') + ' ELSE 99 END';
@@ -55,6 +54,8 @@ export function leadsRoutes(db) {
 
   // ── shared: validate + apply changes to one lead, logging each one ──────────
   function applyChanges(lead, input, user) {
+    // Old clients may still send opportunity_path: it now means Quality.
+    if ('opportunity_path' in input) { const { opportunity_path: op, ...rest } = input; const q = legacyPathToQuality(op); if (String(op ?? '').trim() && !q) throw new HttpError(400, `Unknown lead type "${op}"`); input = 'quality' in rest ? rest : { ...rest, quality: q }; }
     const set = {};
     for (const f of TEXT_FIELDS) {
       if (!(f in input)) continue;
@@ -139,7 +140,7 @@ export function leadsRoutes(db) {
     else if (q.owner === 'me') { where.push('l.owner_id = ?'); params.push(user.id); }
     else if (q.owner) { where.push('l.owner_id = ?'); params.push(Number(q.owner)); }
     if (q.stage) { where.push('l.stage = ?'); params.push(q.stage); }
-    for (const f of ['lead_category', 'tier', 'outreach_status', 'opportunity_path', 'channel']) {
+    for (const f of ['lead_category', 'tier', 'outreach_status', 'channel']) {
       if (q[f] === 'none') where.push(`l.${f} = ''`);
       else if (q[f]) { where.push(`l.${f} = ?`); params.push(q[f]); }
     }
@@ -389,7 +390,7 @@ export function leadsRoutes(db) {
     const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : null);
     const rates = { acceptance: pct(f.accepted, f.invited), reply: pct(f.replied, f.firstDm), meeting: pct(f.meetings, f.replied) };
     const by = (col) => Object.fromEntries(db.prepare(`SELECT ${col} AS k, COUNT(*) AS n FROM leads WHERE ${w} GROUP BY ${col}`).all(...params).map((x) => [x.k || '', x.n]));
-    res.json({ counts: f, rates, byStatus: by('outreach_status'), byCategory: by('lead_category'), byPath: by('opportunity_path'), byTier: by('tier') });
+    res.json({ counts: f, rates, byStatus: by('outreach_status'), byCategory: by('lead_category'), byPath: by('quality'), byTier: by('tier') });
   });
 
   r.get('/:id', (req, res) => {

@@ -1,5 +1,5 @@
 import express from 'express';
-import { PUBLIC_DIR, STAGES, QUALITIES, MANUAL_TYPES, TYPE_LABELS, TZ, TOUCH_TYPES, LINKEDIN_TYPES, MEETING_STATUSES, LINK_KINDS, DEFAULT_WEEKLY_MEETING_TARGET, LEAD_CATEGORIES, TIERS, OUTREACH_STATUSES, CHANNELS, OPPORTUNITY_PATHS } from './config.js';
+import { PUBLIC_DIR, STAGES, QUALITIES, MANUAL_TYPES, TYPE_LABELS, TZ, TOUCH_TYPES, LINKEDIN_TYPES, MEETING_STATUSES, LINK_KINDS, DEFAULT_WEEKLY_MEETING_TARGET, LEAD_CATEGORIES, TIERS, OUTREACH_STATUSES, CHANNELS } from './config.js';
 import { attachUser, authRoutes, requireAuth } from './auth.js';
 import { leadsRoutes } from './routes/leads.js';
 import { activityRoutes } from './routes/activity.js';
@@ -40,7 +40,7 @@ export function createApp(db) {
 
   app.use('/api', authRoutes(db));
   app.get('/api/config', requireAuth, (_req, res) =>
-    res.json({ stages: STAGES, qualities: QUALITIES, manualTypes: MANUAL_TYPES, typeLabels: TYPE_LABELS, ranges: RANGES, tz: TZ, touchTypes: TOUCH_TYPES, linkedinTypes: LINKEDIN_TYPES, meetingStatuses: MEETING_STATUSES, linkKinds: LINK_KINDS, defaultTarget: DEFAULT_WEEKLY_MEETING_TARGET, leadCategories: LEAD_CATEGORIES, tiers: TIERS, outreachStatuses: OUTREACH_STATUSES, channels: CHANNELS, opportunityPaths: OPPORTUNITY_PATHS })
+    res.json({ stages: STAGES, qualities: QUALITIES, manualTypes: MANUAL_TYPES, typeLabels: TYPE_LABELS, ranges: RANGES, tz: TZ, touchTypes: TOUCH_TYPES, linkedinTypes: LINKEDIN_TYPES, meetingStatuses: MEETING_STATUSES, linkKinds: LINK_KINDS, defaultTarget: DEFAULT_WEEKLY_MEETING_TARGET, leadCategories: LEAD_CATEGORIES, tiers: TIERS, outreachStatuses: OUTREACH_STATUSES, channels: CHANNELS })
   );
   app.use('/api/leads', requireAuth, leadsRoutes(db));
   app.use('/api/activity', requireAuth, activityRoutes(db));

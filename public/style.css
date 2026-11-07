@@ -683,3 +683,8 @@ td, th { padding-left: 9px; padding-right: 9px; }
 @media (max-width: 700px) { .mapgrid { grid-template-columns: minmax(0,1fr) minmax(0,1fr); } }
 .ach { display: block; max-width: 100%; overflow-x: auto; }
 @media (max-width: 600px) { .ach th, .ach td { padding: 4px 2px; } .ach thead th { font-size: 10px; letter-spacing: 0; } }
+
+/* Tabs: more breathing room (more left/right padding on each tab) */
+.page-head .seg { padding: 4px; gap: 4px; }
+.page-head .seg button, .page-head .segb { padding: 7px 20px; font-size: 13.5px; }
+@media (max-width: 600px) { .page-head .seg button, .page-head .segb { padding: 6px 14px; } }
