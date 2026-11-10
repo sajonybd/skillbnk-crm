@@ -512,6 +512,7 @@ export function leadsRoutes(db) {
         logActivity(db, { lead_id: lead.id, user_id: req.user.id, type: 'note', note: 'Invite still pending' });
         snooze(addDays(today, rules.pending_recheck_days));
       } else if (result === 'sent') {
+        db.prepare('UPDATE leads SET step_done = ? WHERE id = ?').run(today, lead.id);
         const email = kind === 'email';
         recordActivity(lead, email ? 'email' : 'linkedin_dm', note, req.user);
         const cur = fresh();

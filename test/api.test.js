@@ -413,7 +413,7 @@ test('lead links: drive + chatgpt detection, validation, list columns', async ()
   assert.equal((await call('GET', `/api/leads/${lead.id}`)).links.length, 1);
 });
 
-test('weekly KPI: default 8, carry-forward of shortfall, cancelled not counted, admin target', async () => {
+test('weekly KPI: default 8, carry-forward of shortfall, cancelled still counted, admin target', async () => {
   const { weekStart, addDays, todayLocal } = await import('../server/lib/kpi.js');
   const mk = await call('POST', '/api/team', { name: 'Kpi Person', email: 'kpi@skillbnk.local', password: 'secret1' });
   const thisWeek = weekStart(todayLocal());
@@ -427,7 +427,7 @@ test('weekly KPI: default 8, carry-forward of shortfall, cancelled not counted, 
     db.prepare("INSERT INTO meetings(lead_id, booked_by, created_by, scheduled_date, status, created_at, updated_at, status_changed_at) VALUES (?,?,?,?,?,?,?,?)")
       .run(lead.id, mk.id, mk.id, '2026-01-01', status, iso, iso, iso);
   };
-  // week -2: 5 booked (+1 cancelled, ignored) ; week -1: 6 booked ; this week: 2 booked
+  // week -2: 5 booked (+1 cancelled, which still counts) ; week -1: 6 booked ; this week: 2 booked
   for (let i = 0; i < 5; i++) put(leads[i], addDays(twoAgo, 1) + 'T08:00:00.000Z');
   put(leads[5], addDays(twoAgo, 1) + 'T08:00:00.000Z', 'cancelled');
   for (let i = 6; i < 12; i++) put(leads[i], addDays(thisWeek, -6) + 'T08:00:00.000Z');
@@ -435,19 +435,19 @@ test('weekly KPI: default 8, carry-forward of shortfall, cancelled not counted, 
   let k = (await call('GET', '/api/kpi')).members.find((m) => m.id === mk.id);
   const byWeek = Object.fromEntries(k.history.map((h) => [h.week, h]));
   assert.equal(byWeek[twoAgo].target, 8);
-  assert.equal(byWeek[twoAgo].booked, 5);
-  assert.equal(byWeek[addDays(thisWeek, -7)].carry_in, 3);   // missed 3
-  assert.equal(byWeek[addDays(thisWeek, -7)].target, 11);
+  assert.equal(byWeek[twoAgo].booked, 6);
+  assert.equal(byWeek[addDays(thisWeek, -7)].carry_in, 2);   // missed 2
+  assert.equal(byWeek[addDays(thisWeek, -7)].target, 10);
   assert.equal(byWeek[addDays(thisWeek, -7)].booked, 6);
-  assert.equal(k.carry_in, 5);                               // 11 - 6 carried
-  assert.equal(k.target, 13);
+  assert.equal(k.carry_in, 4);                               // 10 - 6 carried
+  assert.equal(k.target, 12);
   assert.equal(k.booked, 2);
-  assert.equal(k.remaining, 11);
+  assert.equal(k.remaining, 10);
   // admin changes the target for this person from this week
   assert.equal((await call('PUT', '/api/kpi/targets', { user_ids: [mk.id], target: 10 })).status, 200);
   k = (await call('GET', '/api/kpi')).members.find((m) => m.id === mk.id);
   assert.equal(k.base, 10);
-  assert.equal(k.target, 15);
+  assert.equal(k.target, 14);
   assert.equal((await call('PUT', '/api/kpi/targets', { user_ids: 'all', target: -1 })).status, 400);
   // members cannot edit
   const res = await fetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'kpi@skillbnk.local', password: 'secret1' }) });

@@ -26,7 +26,7 @@ export function getKpiStart(db) {
 }
 
 // Weekly meeting KPI with carry-forward.
-//   booked  = meetings created that week (not cancelled, lead not in the bin), credited to booked_by
+//   booked  = meetings created that week (cancelled ones count too, lead not in the bin), credited to booked_by
 //   target  = base target + carry_in;   carry_out = max(0, target - booked)
 // A surplus never reduces next week's target.
 export function computeKpi(db, upToWeek = weekStart(todayLocal())) {
@@ -35,7 +35,7 @@ export function computeKpi(db, upToWeek = weekStart(todayLocal())) {
   const booked = new Map(); // userId -> Map(week -> n)
   const rows = db.prepare(
     `SELECT m.booked_by AS u, m.created_at AS at FROM meetings m JOIN leads l ON l.id = m.lead_id
-     WHERE l.deleted_at = '' AND m.status != 'cancelled' AND m.booked_by IS NOT NULL`
+     WHERE l.deleted_at = '' AND m.booked_by IS NOT NULL`
   ).all();
   for (const r of rows) {
     const w = weekStart(localDate(r.at));

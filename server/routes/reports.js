@@ -23,6 +23,35 @@ const who = (l) => (l.company && nm(l) !== l.company ? `${nm(l)} (${l.company})`
 const statusText = (s) => (s ? OUTREACH_STATUSES[s] || s : 'No response yet');
 const GOOD_FIT = (q) => q && q !== 'Not a Fit';
 
+
+// WhatsApp copy: no tables, single * for bold. Each table becomes one bullet per row.
+const ROW = {
+  'Activity|Target|Done|% of target': (c) => `- ${c[0]}: **${c[2]}** / ${c[1]} (${c[3]})`,
+  'Prospect|Comment|Time': (c) => `- **${c[0]}** (${c[2]}): ${c[1]}`,
+  'Prospect|Type|Message|Outcome so far': (c) => `- **${c[0]}** (${c[1]}): ${c[2]} [${c[3]}]`,
+  'Prospect|Email|Outcome so far': (c) => `- **${c[0]}**: ${c[1]} [${c[2]}]`,
+  'Prospect|Note sent|Status': (c) => `- **${c[0]}**: ${c[1]} [${c[2]}]`,
+  'Prospect|Verdict|Program fit|Reason': (c) => `- **${c[0]}**: ${c[1]}${c[2] !== '–' ? ' (' + c[2] + ')' : ''}. ${c[3]}`,
+  'Prospect|When|Status|Notes': (c) => `- **${c[0]}**: ${c[1]}, ${c[2]}${c[3] !== '–' ? '. ' + c[3] : ''}`,
+};
+export function toWhatsApp(md) {
+  const lines = md.split('\n');
+  const out = [];
+  const cells = (x) => x.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((v) => v.trim());
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*\|/.test(lines[i]) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1] || '')) {
+      const head = cells(lines[i]);
+      const fmt = ROW[head.join('|')] || ((c) => '- ' + c.map((v, j) => (j ? `${head[j]}: ${v}` : `**${v}**`)).join(' · '));
+      i += 2;
+      for (; i < lines.length && /^\s*\|/.test(lines[i]); i++) out.push(fmt(cells(lines[i])));
+      i--;
+      continue;
+    }
+    out.push(lines[i]);
+  }
+  return out.join('\n').replace(/\*\*/g, '*').replace(/^(#{1,2}) (.+)$/gm, (m, h, t) => (h === '#' && !/^\*/.test(t) ? `# *${t}*` : m)).replace(/\n{3,}/g, '\n\n');
+}
+
 export function reportRoutes(db) {
   const r = Router();
   const shift = `${TZ_OFFSET_MIN >= 0 ? '+' : '-'}${Math.abs(TZ_OFFSET_MIN)} minutes`;
@@ -180,7 +209,8 @@ export function reportRoutes(db) {
     const today = todayLocal();
     const date = DATE_RE.test(req.query.date || '') ? req.query.date : today;
     const { picked } = pickPeople(req);
-    res.json({ kind: 'eod', title: `End-of-Day Update ${date}`, date, markdown: picked.map((u) => eodMd(u, date, today)).join('\n\n---\n\n') });
+    const markdown = picked.map((u) => eodMd(u, date, today)).join('\n\n---\n\n');
+    res.json({ kind: 'eod', title: `End-of-Day Update ${date}`, date, markdown, copy: toWhatsApp(markdown) });
   });
 
   // ── Weekly KPI report ──────────────────────────────────────────────────────
@@ -283,7 +313,8 @@ export function reportRoutes(db) {
     if (Date.parse(to) - Date.parse(from) > 62 * 86400000) throw new HttpError(400, 'Choose a period of up to 62 days');
     const { picked, all } = pickPeople(req);
     const users = all ? picked.filter((u) => u.role !== 'admin') : picked;
-    res.json({ kind: 'weekly', title: `Weekly KPI ${from} to ${to}`, from, to, markdown: weeklyMd(users.length ? users : picked, from, to, today, all) });
+    const markdown = weeklyMd(users.length ? users : picked, from, to, today, all);
+    res.json({ kind: 'weekly', title: `Weekly KPI ${from} to ${to}`, from, to, markdown, copy: toWhatsApp(markdown) });
   });
 
   return r;

@@ -46,6 +46,14 @@ export async function renderFollowups(root, ctx, { assignee, view, onChange }) {
       try {
         await api('POST', `/api/leads/${a.id}/step`, { result, note: said.value, ...(extra || {}) });
         toast(`${a.name}: ${DONE_TEXT[result]}`);
+        // A logged comment or a "seen, no reply" note does not finish the step, so the card stays (with a tick) and the step is still due.
+        if (result === 'comment' || result === 'seen') {
+          card.classList.remove('busy');
+          said.value = '';
+          card.querySelector('.act-logged')?.remove();
+          card.querySelector('.act-btns').before(h('div', { class: 'act-logged sub' }, '✓ ' + DONE_TEXT[result] + '. This step is still due: it leaves the list when you finish it.'));
+          return;
+        }
         card.classList.add('gone');
         setTimeout(() => onChange(), 250);
       } catch (e) { card.classList.remove('busy'); toast(e.message, true); }

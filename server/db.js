@@ -154,6 +154,12 @@ export function openDb(file) {
     WHERE quality = '' AND opportunity_path != ''`);
   // "Not today": push a lead's next step to a later date without touching its history.
   if (!have.includes('snooze_until')) db.exec("ALTER TABLE leads ADD COLUMN snooze_until TEXT NOT NULL DEFAULT ''");
+  // Date of the last step someone finished on this lead: steps that were due on or before it are done and never come back.
+  if (!have.includes('step_done')) {
+    db.exec("ALTER TABLE leads ADD COLUMN step_done TEXT NOT NULL DEFAULT ''");
+    // Leads that were already messaged or emailed: those steps are done, so they stop coming back.
+    db.exec("UPDATE leads SET step_done = COALESCE((SELECT MAX(substr(a.created_at, 1, 10)) FROM activities a WHERE a.lead_id = leads.id AND a.type IN ('email', 'linkedin_dm', 'linkedin_inmail')), '')");
+  }
   // Placeholder text that came from spreadsheets ("null") is not a real next step.
   db.exec("UPDATE leads SET next_action = '' WHERE LOWER(TRIM(next_action)) IN ('null','undefined','none','n/a')");
   db.exec(`CREATE TABLE IF NOT EXISTS api_tokens (

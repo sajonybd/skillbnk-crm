@@ -57,7 +57,9 @@ export function nextStep(l, today, rules = DEFAULT_RULES) {
     steps.push({ due: addDays(l.first_dm_date, rules.followup2_day), kind: 'last_followup', detail: 'Two unanswered messages is the limit', reason: `No reply ${rules.followup2_day} days after first message` });
   }
   // The most recent step that has come due.
-  const due = steps.filter((s) => s.due <= today).sort((a, b) => (a.due < b.due ? 1 : -1));
+  // Steps worked out from dates (day 7 check, day 8 email, day 7/14 follow-ups) are finished once someone has done a step on or after their due date.
+  const done = clean(l.step_done);
+  const due = steps.filter((s) => s.due <= today && (s === planned || !done || s.due > done)).sort((a, b) => (a.due < b.due ? 1 : -1));
   const s = due[0];
   if (!s) return null;
   return finish(s);

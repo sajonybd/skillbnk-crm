@@ -694,3 +694,4 @@ td, th { padding-left: 9px; padding-right: 9px; }
 .plan-member .pcard .rep-doc h2:first-child { margin-top: 4px; }
 .plan-side .ach th, .plan-side .ach td { padding-left: 3px; padding-right: 3px; }
 .plan-side .ach thead th { font-size: 10px; letter-spacing: 0; }
+.act-logged { color: #0f7a4d; font-weight: 600; margin: 6px 0 2px; }

@@ -120,7 +120,7 @@ export async function render(root, ctx) {
     fill(kpiBox,
       h('div', { class: 'panel-h', style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap' },
         h('div', null, h('h2', null, 'Weekly KPI — meetings booked'),
-          h('p', null, `Default ${kpi.defaultTarget} per member per week. Missed meetings are added to next week's target.`)),
+          h('p', null, `Default ${kpi.defaultTarget} per member per week. A meeting counts once it is booked, even if it is cancelled later. Missed meetings are added to next week's target.`)),
         h('div', { class: 'spacer' }), nav, setAll, startBtn),
       members.length ? h('div', { class: 'kpanel' }, members.map(memberCard)) : h('div', { class: 'empty' }, 'No team members to track yet.'));
   }

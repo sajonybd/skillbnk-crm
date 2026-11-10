@@ -67,7 +67,7 @@ export function meetingsRoutes(db) {
     const uw = u ? ' AND m.booked_by = ?' : '';
     const up = u ? [u] : [];
     const n = (cond, ...extra) => db.prepare(`SELECT COUNT(*) AS n ${FROM} WHERE l.deleted_at = '' ${cond}${uw}`).get(...extra, ...up).n;
-    const weekRows = db.prepare(`SELECT m.created_at AS at ${FROM} WHERE l.deleted_at = '' AND m.status != 'cancelled'${uw}`).all(...up);
+    const weekRows = db.prepare(`SELECT m.created_at AS at ${FROM} WHERE l.deleted_at = ''${uw}`).all(...up);
     res.json({
       today,
       upcoming: n("AND m.status = 'booked' AND m.scheduled_date >= ?", today),
