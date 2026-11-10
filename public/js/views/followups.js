@@ -67,7 +67,8 @@ export async function renderFollowups(root, ctx, { assignee, view, onChange }) {
     const late = a.late_days > 0 ? `${a.late_days}d late` : 'due';
     fill(card,
       h('div', { class: 'act-top', onclick: () => openLead(a.id, ctx, () => onChange()) },
-        h('div', { class: 'act-who' }, h('div', { class: 'nm' }, a.name, a.pursue ? h('span', { class: 'tier tA' }, 'PURSUE') : null, a.tier ? h('span', { class: 'tier t' + a.tier }, a.tier) : null), h('div', { class: 'sub' }, [a.title, a.company].filter(Boolean).join(' · '))),
+        h('div', { class: 'act-who' }, h('div', { class: 'nm' }, a.name, a.pursue ? h('span', { class: 'tier tA' }, 'PURSUE') : null, a.tier ? h('span', { class: 'tier t' + a.tier }, a.tier) : null), h('div', { class: 'sub' }, [a.title, a.company].filter(Boolean).join(' · ')),
+          a.fit ? h('div', { class: 'fitrow', title: a.fit.why + ' (a suggestion: please verify)' }, h('span', { class: 'fitchip ' + a.fit.size_tone }, { big: '50+ emp', sweet: '10–50', small: '<10', unknown: 'size ?' }[a.fit.size]), h('span', { class: 'fitchip ' + a.fit.auth_tone }, { dm: 'decides', maybe: 'check role', low: 'cannot decide', unknown: 'role ?' }[a.fit.authority]), a.fit.suggest === 'skip' ? h('span', { class: 'fitchip red solid' }, 'Suggest SKIP: check, then close') : null) : null),
         h('div', { class: 'act-meta' }, h('span', { class: 'kind ' + (KIND_TONE[a.kind] || '') }, a.verb), h('span', { class: 'sub' + (a.late_days > 3 ? ' due' : '') }, `${a.reason} · ${late}`))),
       a.detail && a.kind !== 'reply' ? h('div', { class: 'act-detail' }, a.detail) : null,
       a.question ? h('div', { class: 'act-ask' }, 'Ask: ' + a.question) : null,

@@ -202,15 +202,88 @@ export function reportRoutes(db) {
     L.push(`- Replies waiting for an answer: **${left.responses.counts.replied}** · Seen but no reply: **${left.responses.counts.seen_no_reply}** · Invites pending: **${left.responses.counts.pending_invites}**`);
     if (left.summary.stale) L.push(`- Stale leads to close or nurture: **${left.summary.stale}**`);
     L.push(...(undone.length ? ['- Team tasks not finished:', ...undone.map((t) => `  - ${t.title}`)] : ['- All scheduled team tasks are done.']), '');
-    return L.join('\n');
+    // ── WhatsApp summary: totals and a few names, no lists of every lead ──
+    const uniq = (arr) => [...new Map(arr.map((a) => [a.lead_id ?? a.id ?? nm(a), a])).values()];
+    const names = (arr, max = 5) => { const n = uniq(arr).map(nm); return n.length <= max ? n.join(', ') : `${n.slice(0, max).join(', ')} and ${n.length - max} more`; };
+    const tg = (k) => tgt.find((x) => x.metric === k)?.daily_target || 0;
+    const withTarget = (k) => (tg(k) ? ` (Target: ${tg(k)})` : '');
+    const B = (n) => `*${n}*`;
+    const C = [];
+    const dt = new Date(date + 'T00:00:00Z');
+    const dateLine = `${dt.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'long', day: '2-digit', year: 'numeric' })} (${dt.toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'long' })})`;
+    C.push(`*Work Update – ${dateLine}*`, `By: *${u.name.toUpperCase()}*`, '');
+    const accU = uniq(acc);
+    C.push('*1. LinkedIn Outreach & Lead Activities*');
+    if (count('linkedin_view')) C.push(`• Researched and reviewed ${B(count('linkedin_view'))} profiles${withTarget('linkedin_view')}.`);
+    if (inv.length) C.push(`• Sent ${B(inv.length)} connection requests${withTarget('linkedin_connect')}.`);
+    if (accU.length) C.push(`• Logged ${B(accU.length)} newly accepted connections (${names(acc, 4)}).`);
+    if (dms.length) C.push(`• Sent ${B(dms.length)} LinkedIn messages and follow-ups${withTarget('linkedin_dm')}.`);
+    if (emails.length) C.push(`• Sent ${B(emails.length)} emails.`);
+    if (count('linkedin_like')) C.push(`• Completed ${B(count('linkedin_like'))} post likes${withTarget('linkedin_like')}.`);
+    if (count('linkedin_follow')) C.push(`• Followed ${B(count('linkedin_follow'))} prospect and company profiles${withTarget('linkedin_follow')}.`);
+    if (comments.length) C.push(`• Wrote ${B(comments.length)} comments on prospect and industry posts (engaged with ${names(comments, 4)}${tg('linkedin_comment') ? `; target ${tg('linkedin_comment')}` : ''}).`);
+    if (replies.length) C.push(`• Received ${B(replies.length)} ${replies.length === 1 ? 'reply' : 'replies'} (${names(replies, 4)}).`);
+    if (C[C.length - 1] === '*1. LinkedIn Outreach & Lead Activities*') C.push('• No outreach activity was logged today.');
+    C.push('');
+    C.push('*2. Lead Research & Qualification*');
+    if (rs.length) {
+      const fits = {};
+      for (const x of rs.filter((y) => y.verdict === 'QUALIFIED')) fits[x.fit] = (fits[x.fit] || 0) + 1;
+      const split = Object.entries(fits).map(([f, n]) => (f === '–' ? `${n} other` : `${n} ${f}`)).join(', ');
+      C.push(`• Screened and rated ${B(rs.length)} leads in the CRM:`);
+      if (ok) C.push(`  - ${B(ok)} QUALIFIED${split ? ` (${split})` : ''}`);
+      if (bad) C.push(`  - ${B(bad)} NOT A FIT`);
+      if (rs.length - ok - bad) C.push(`  - ${B(rs.length - ok - bad)} NURTURE / NOT INTERESTED`);
+    } else C.push('• No leads were rated today.');
+    C.push('');
+    if (meets.length) {
+      const done = meets.filter((x) => x.status === 'completed').length, booked = meets.filter((x) => x.booked_on === date).length;
+      C.push('*3. Meetings & Client Coordination*');
+      if (booked) C.push(`• Booked ${B(booked)} meetings (${meets.filter((x) => x.booked_on === date).map(nm).join(', ')}).`);
+      if (done) C.push(`• Held ${B(done)} meetings (${meets.filter((x) => x.status === 'completed').map(nm).join(', ')}).`);
+      const rest = meets.length - booked - done;
+      if (rest > 0) C.push(`• ${B(rest)} more meetings on today's calendar.`);
+      C.push('');
+    }
+    C.push(`*${meets.length ? '4' : '3'}. Team Tasks & Operational Support*`);
+    // Only tasks that were ticked as done are reported; open ones appear under tomorrow's priorities.
+    const doneTasks = tasks.filter((t) => t.done);
+    if (!tasks.length) C.push('• No team tasks were scheduled.');
+    else {
+      C.push(`• Completed ${B(doneTasks.length)} of ${B(tasks.length)} assigned daily tasks${doneTasks.length ? ':' : '.'}`);
+      for (const t of doneTasks) C.push(`  - ${t.title}${t.expected ? ': ' + t.expected : ''}`);
+    }
+    C.push('');
+    C.push('*Key Outcomes*');
+    const direct = rs.filter((x) => x.verdict === 'QUALIFIED' && /Customer/i.test(x.fit)).length, partner = rs.filter((x) => x.verdict === 'QUALIFIED' && /Partner/i.test(x.fit)).length;
+    if (ok) C.push(`• Qualified ${B(ok)} new prospects${direct || partner ? ` (${direct} direct customer, ${partner} strategic partnership)` : ''}.`);
+    if (accU.length) C.push(`• ${B(accU.length)} accepted connections are ready for first-message outreach.`);
+    if (replies.length) C.push(`• ${B(replies.length)} ${replies.length === 1 ? 'reply' : 'replies'} received from prospects.`);
+    if (meets.filter((x) => x.booked_on === date).length) C.push(`• ${B(meets.filter((x) => x.booked_on === date).length)} meetings booked.`);
+    const hit = Object.keys(TARGET_METRICS).filter((k) => tg(k) && count(k) >= tg(k));
+    if (hit.length) C.push(`• Target met or exceeded for: ${hit.map((k) => TARGET_METRICS[k]).join(', ')}.`);
+    if (C[C.length - 1] === '*Key Outcomes*') C.push('• Daily activity logged in the CRM.');
+    C.push('');
+    C.push("*Carryover & Tomorrow's Priorities*");
+    if (accU.length) C.push(`• Send first messages to today's ${B(accU.length)} accepted connections (${names(acc, 3)}).`);
+    if (left.responses.counts.replied) C.push(`• Answer ${B(left.responses.counts.replied)} ${left.responses.counts.replied === 1 ? 'reply' : 'replies'} waiting.`);
+    if (left.summary.actions) {
+      const byVerb = {};
+      for (const a of left.actions) byVerb[a.verb] = (byVerb[a.verb] || 0) + 1;
+      const top = Object.entries(byVerb).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([v, n]) => `${n} × ${v.toLowerCase()}`).join('; ');
+      C.push(`• Work through ${B(left.summary.actions)} lead actions due${top ? ` (mostly: ${top})` : ''}.`);
+    }
+    if (left.summary.stale) C.push(`• Close or nurture ${B(left.summary.stale)} stale leads.`);
+    if (undone.length) C.push(`• Finish ${B(undone.length)} open team tasks (${undone.slice(0, 3).map((t) => t.title).join('; ')}${undone.length > 3 ? ` and ${undone.length - 3} more` : ''}).`);
+    return { md: L.join('\n'), copy: C.join('\n') };
   }
 
   r.get('/eod', (req, res) => {
     const today = todayLocal();
     const date = DATE_RE.test(req.query.date || '') ? req.query.date : today;
     const { picked } = pickPeople(req);
-    const markdown = picked.map((u) => eodMd(u, date, today)).join('\n\n---\n\n');
-    res.json({ kind: 'eod', title: `End-of-Day Update ${date}`, date, markdown, copy: toWhatsApp(markdown) });
+    const items = picked.map((u) => eodMd(u, date, today));
+    res.json({ kind: 'eod', title: `End-of-Day Update ${date}`, date, markdown: items.map((x) => x.md).join('\n\n---\n\n'), copy: items.map((x) => x.copy).join('\n\n---\n\n') });
   });
 
   // ── Weekly KPI report ──────────────────────────────────────────────────────

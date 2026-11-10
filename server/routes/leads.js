@@ -1,3 +1,4 @@
+import { fitOf } from '../lib/fit.js';
 import { WORK_CASE, WORK_KEYS, WORK_GROUPS, workOrder } from '../lib/work.js';
 import { Router } from 'express';
 import { STAGES, QUALITIES, MANUAL_TYPES, FIRST_TOUCH_TYPES, COMPANY_VIEW_TYPE, MEETING_TYPES, LINK_KINDS, LEAD_CATEGORIES, TIERS, OUTREACH_STATUSES, CHANNELS, legacyPathToQuality } from '../config.js';
@@ -151,6 +152,13 @@ export function leadsRoutes(db) {
     if (q.untouched === '1') where.push("l.last_activity_at = ''");
     if (WORK_GROUPS[q.work]) { where.push(`${WORK_CASE} IN (${WORK_GROUPS[q.work].map(() => '?').join(',')})`); params.push(...WORK_GROUPS[q.work]); }
     else if (WORK_KEYS.includes(q.work)) { where.push(`${WORK_CASE} = ?`); params.push(q.work); }
+    // Fit suggestions (headcount and title): size = big|sweet|small|unknown, authority = dm|maybe|low|unknown, suggest = skip|nurture|qualify|good
+    if (q.size || q.authority || q.suggest) {
+      const ids = db.prepare("SELECT id, title, employees FROM leads WHERE deleted_at = ''").all()
+        .filter((x) => { const f = fitOf(x); return (!q.size || f.size === q.size) && (!q.authority || f.authority === q.authority) && (!q.suggest || f.suggest === q.suggest); })
+        .map((x) => x.id);
+      where.push('l.id IN (SELECT value FROM json_each(?))'); params.push(JSON.stringify(ids));
+    }
     if (q.meeting === '1') where.push("l.meeting_date != ''");
     if (q.due === '1') { where.push("l.next_action_date != '' AND l.next_action_date <= ?"); params.push(todayLocal()); }
     return { sql: where.length ? 'WHERE ' + where.join(' AND ') : '', params };
@@ -174,7 +182,7 @@ export function leadsRoutes(db) {
        FROM leads l LEFT JOIN users u ON u.id = l.owner_id
        ${sql} ORDER BY ${order}, l.id DESC LIMIT ? OFFSET ?`
     ).all(...params, limit, (page - 1) * limit);
-    res.json({ rows, total, page, limit });
+    res.json({ rows: rows.map((x) => ({ ...x, fit: fitOf(x) })), total, page, limit });
   });
 
   r.get('/ids', (req, res) => {
@@ -208,6 +216,14 @@ export function leadsRoutes(db) {
       qualities: count('quality'),
       owners: count('owner_id'),
       sources: db.prepare("SELECT source AS k, COUNT(*) AS n FROM leads WHERE deleted_at = '' AND source != '' GROUP BY source ORDER BY n DESC").all(),
+      fit: (() => {
+        const out = { size: {}, authority: {}, suggest: {} };
+        for (const x of db.prepare("SELECT title, employees FROM leads WHERE deleted_at = ''").all()) {
+          const f = fitOf(x);
+          for (const k of ['size', 'authority', 'suggest']) out[k][f[k]] = (out[k][f[k]] || 0) + 1;
+        }
+        return out;
+      })(),
     });
   });
 
@@ -311,7 +327,7 @@ export function leadsRoutes(db) {
        FROM leads l LEFT JOIN users o ON o.id = l.owner_id LEFT JOIN users d ON d.id = l.deleted_by
        ${sql} ORDER BY l.deleted_at DESC, l.id DESC LIMIT ? OFFSET ?`
     ).all(...params, limit, (page - 1) * limit);
-    res.json({ rows, total, page, limit });
+    res.json({ rows: rows.map((x) => ({ ...x, fit: fitOf(x) })), total, page, limit });
   });
 
   r.get('/trash/ids', requireAdmin, (_req, res) => {
@@ -406,7 +422,7 @@ export function leadsRoutes(db) {
        WHERE m.lead_id = ? ORDER BY m.scheduled_date DESC, m.scheduled_time DESC, m.id DESC`
     ).all(lead.id);
     const links = db.prepare('SELECT id, kind, label, url, created_at FROM lead_links WHERE lead_id = ? ORDER BY id').all(lead.id);
-    res.json({ lead, activities, meetings, links });
+    res.json({ lead, fit: fitOf(lead), activities, meetings, links });
   });
 
   const liveLead = (id) => {

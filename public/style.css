@@ -695,3 +695,19 @@ td, th { padding-left: 9px; padding-right: 9px; }
 .plan-side .ach th, .plan-side .ach td { padding-left: 3px; padding-right: 3px; }
 .plan-side .ach thead th { font-size: 10px; letter-spacing: 0; }
 .act-logged { color: #0f7a4d; font-weight: 600; margin: 6px 0 2px; }
+
+/* Fit suggestions (headcount and title): hints for a person to check */
+.fitrow { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.fitchip { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; border: 1px solid transparent; line-height: 1.5; }
+.fitchip.green { background: #e6f6ee; color: #0f7a4d; border-color: #bfe6d1; }
+.fitchip.amber { background: #fff4de; color: #9a6200; border-color: #f2d9a3; }
+.fitchip.red { background: #fde8e8; color: #b42318; border-color: #f5c2c0; }
+.fitchip.grey { background: #eef1f7; color: #5b6478; border-color: #dbe1ee; }
+.fitchip.red.solid { background: #b42318; color: #fff; border-color: #b42318; }
+.fitbox { border-radius: 10px; padding: 10px 12px; border: 1px solid #dbe1ee; background: #f8f9fc; }
+.fitbox.red { background: #fff5f5; border-color: #f5c2c0; }
+.fitbox.green { background: #f2fbf6; border-color: #bfe6d1; }
+.fitbox.amber { background: #fffaf0; border-color: #f2d9a3; }
+.fitbox h3 { margin: 0 0 6px; }
+.fit-line { display: flex; gap: 8px; align-items: center; margin: 3px 0; font-size: 13px; }
+.fit-say { margin: 6px 0 2px; font-size: 13.5px; }

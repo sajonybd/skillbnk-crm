@@ -72,7 +72,7 @@ export async function openLead(id, ctx, onChange = () => {}) {
   const closeAndNotify = close;
 
   async function load() {
-    const { lead, activities, meetings, links } = await api('GET', `/api/leads/${id}`);
+    const { lead, fit, activities, meetings, links } = await api('GET', `/api/leads/${id}`);
     draw(lead, activities, meetings, links);
   }
 
@@ -292,6 +292,12 @@ export async function openLead(id, ctx, onChange = () => {}) {
           h('div', { class: 'row', style: 'margin-top:6px' }, pill(l.stage, 's'), pill(l.quality, 'q'), l.owner_name ? h('span', { class: 'muted' }, 'Owner: ' + l.owner_name) : null),
           linkRow),
         h('button', { class: 'btn small', onclick: closeAndNotify }, icon('x', 14), 'Close')),
+      fit ? h('section', { class: 'fitbox ' + (fit.suggest === 'skip' ? 'red' : fit.suggest === 'good' ? 'green' : 'amber') },
+        h('h3', null, 'Fit check (a suggestion, please verify)'),
+        h('div', { class: 'fit-line' }, h('span', { class: 'fitchip ' + fit.size_tone }, 'Size'), fit.size_text),
+        h('div', { class: 'fit-line' }, h('span', { class: 'fitchip ' + fit.auth_tone }, 'Title'), fit.auth_text),
+        h('div', { class: 'fit-say' }, h('b', null, { skip: 'Suggest SKIP', nurture: 'Suggest NURTURE', qualify: 'Suggest QUALIFY', good: 'Looks good' }[fit.suggest]), ': ' + fit.why),
+        h('div', { class: 'sub' }, 'Based on the headcount and job title recorded in the CRM (they may be old). Nothing changes until you decide.')) : null,
       h('section', null, h('h3', null, 'Pipeline'),
         h('div', { class: 'grid2' },
           field('Owner', owner), field('Stage', stage),

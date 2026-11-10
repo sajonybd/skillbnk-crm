@@ -1,3 +1,4 @@
+import { fitOf } from '../lib/fit.js';
 import { Router } from 'express';
 import { TARGET_METRICS, TZ_OFFSET_MIN, PLAN_SWITCH_HOUR } from '../config.js';
 import { todayLocal, addDays, weekStart } from '../lib/kpi.js';
@@ -58,7 +59,7 @@ export function planMembers(db, { date, today, picked, skipEmpty = false }) {
       if (!s) continue;
       const late = Math.round((Date.parse(date) - Date.parse(s.due)) / 86400000);
       all.push({
-        id: l.id, name: `${l.first_name} ${l.last_name}`.trim() || l.company, title: l.title, company: l.company, tier: l.tier,
+        id: l.id, name: `${l.first_name} ${l.last_name}`.trim() || l.company, title: l.title, company: l.company, tier: l.tier, employees: l.employees, fit: fitOf(l),
         kind: s.kind, verb: KINDS[s.kind].verb, action: s.action, detail: s.detail, reason: s.reason, due: s.due, late_days: late,
         outreach_status: l.outreach_status, email: l.email && /verified|valid/i.test(l.email_status) ? l.email : '',
         linkedin: l.linkedin, question: clean(l.todays_question), why: clean(l.why_in_pipeline),
