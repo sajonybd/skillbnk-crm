@@ -34,6 +34,9 @@ export const DEFAULT_PLAYBOOK = `# skillBNK outreach rules
 - **14 days**: last follow-up, then stop. **Two unanswered messages is the limit**; pause 3 to 4 weeks.
 - A step more than 14 days late is stale. Close it or move it to nurture; do not chase it.
 
+## Test: Jay Shop-type leads (proposed 11 Nov 2026, awaiting Shiblu's yes; running as a 4-week test)
+A company with 51 to 200 employees that trains its **own** staff (does not sell training), with no LMS found, a recurring training need and a path to the owner or an executive, may be tried instead of skipped. Over 200 stays SKIP when cold. Training providers over 50 stay SKIP as customers (they already have an LMS). Max 3 to 5 such leads per person per week. Write "QUALIFY - TRY (Jay Shop-type test)" in Assessment. Review every Saturday: replies, meetings, time spent.
+
 ## Meetings
 - Never in a first message. Only after the lead replied with something specific about their training, or invited a call.
 - Propose the window: **Tuesday, Wednesday or Thursday after 3 PM Michigan time**, and always state the time zone. A person checks the calendar before any exact time is named.

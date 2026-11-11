@@ -87,6 +87,10 @@ export function guideOf(l, { fit, counts = {}, today, rules, meetings = [] }) {
   if (l.outreach_status === 'M' || l.stage === 'Meeting Booked') return g({ kind: 'meeting', action: 'Prepare for the meeting', channel: '', why: 'A meeting is booked.', how: ['Read the history and the Notes.', 'Write what you want to learn as three questions.'], dont: [] });
 
   if (!l.invite_sent_date && !l.accepted_date && !n('linkedin_connect')) {
+    if (fit?.suggest === 'try' && !/\bTRY\b/.test(l.assessment || '')) return g({ kind: 'try_check', action: 'Jay Shop-type test: check five facts before you connect', channel: 'research', due: today,
+      why: fit.why,
+      how: ['1. It trains its OWN employees and does not sell training (otherwise: likely a training provider with an LMS, so SKIP as a customer).', '2. No LMS found (read the website, the Login and Enroll links, the job posts).', '3. A recurring training need: frequent hiring, several locations or shifts, or compliance work.', '4. A path to the owner or an executive (a Director of Training alone is a champion, not the buyer).', '5. Headcount is 51 to 200, verified on LinkedIn or the website.', 'All five: write the Assessment as "QUALIFY - TRY (Jay Shop-type test) | ..." and carry on. Any missing: write what is missing. If it fails 1, 2 or 5, mark Not a Fit.'],
+      dont: ['No message until the five facts are checked.', 'Do not pitch a replacement LMS.'] });
     if (!n('linkedin_view') && !n('linkedin_company_view')) return g({ kind: 'research', action: 'Research first: read the profile and the company', channel: 'research',
       why: 'No one has looked at this lead yet.', how: ['Open the LinkedIn profile (the button logs the visit) and read the About section and recent posts.', 'Open the company page and the website. Note headcount, what they sell, who they train and any LMS.', 'Press "Copy AI prompt" and paste it into your AI chat for the full research, then check what it says.'], dont: ['Do not connect yet.'] });
     if (!verdict) return g({ kind: 'verdict', action: 'Decide the verdict: PURSUE, QUALIFY, NURTURE or SKIP', channel: 'research',

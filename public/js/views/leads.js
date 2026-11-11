@@ -87,7 +87,7 @@ export async function render(root, ctx) {
   const authSel = sel('authority', [h('option', { value: '' }, 'Any title'),
     ...[['dm', 'Decision maker'], ['maybe', 'Director / VP / head'], ['low', 'Likely cannot decide'], ['unknown', 'Title unclear']].map(([k, t]) => h('option', { value: k }, `${t} (${ft.authority[k] || 0})`))]);
   const sugSel = sel('suggest', [h('option', { value: '' }, 'Any suggestion'),
-    ...[['good', 'Looks good'], ['qualify', 'Suggest QUALIFY'], ['nurture', 'Suggest NURTURE'], ['skip', 'Suggest SKIP']].map(([k, t]) => h('option', { value: k }, `${t} (${ft.suggest[k] || 0})`))]);
+    ...[['good', 'Looks good'], ['qualify', 'Suggest QUALIFY'], ['try', 'Jay Shop-type TEST'], ['nurture', 'Suggest NURTURE'], ['skip', 'Suggest SKIP']].map(([k, t]) => h('option', { value: k }, `${t} (${ft.suggest[k] || 0})`))]);
   const srcSel = sel('source', options(facets.sources.map((s) => [s.k, `${s.k} (${s.n})`]), { blank: 'All sources' }));
 
   const sortSel = h('select', { onchange: () => {

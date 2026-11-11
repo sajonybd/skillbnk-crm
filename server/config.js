@@ -129,3 +129,7 @@ export const legacyPathToQuality = (v) => { const t = String(v || '').trim(); re
 // New lead fields: text columns, and the date columns that the log fills in automatically.
 export const OUTREACH_TEXT_FIELDS = ['lead_category', 'tier', 'problem_pool', 'why_in_pipeline', 'todays_question', 'outreach_status', 'denial_reason', 'channel', 'assessment'];
 export const OUTREACH_DATE_FIELDS = ['invite_sent_date', 'accepted_date', 'first_dm_date'];
+
+// "Jay Shop-type" test (proposed 11 Nov 2026, awaiting the owner's yes): companies over 50 employees that train their own staff
+// are suggested as TRY instead of SKIP, up to this size. Set enabled to false to switch the test off everywhere in the CRM.
+export const TRY_TEST = { enabled: true, max_employees: 200, per_person_per_week: '3 to 5' };

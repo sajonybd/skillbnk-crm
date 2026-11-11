@@ -1,3 +1,4 @@
+import { TRY_TEST } from '../config.js';
 // Fit hints for a lead, worked out only from what is already recorded (headcount and job title).
 // These are SUGGESTIONS for a person to check. Nothing here changes a lead, a verdict or a dropdown.
 // Rules come from the outreach rules v8: more than 50 employees = big company (skip as a direct customer),
@@ -84,17 +85,22 @@ export function fitOf(lead) {
   const active = ['R', 'M'].includes(lead.outreach_status) || ['Replied', 'Meeting Booked', 'Meeting Done'].includes(lead.stage);
   if (size === 'big' && active) { suggest = 'qualify'; why = 'Over 50 employees, but already in an active conversation or meeting. The size rule is for cold outreach: do not close it. Continue and let the owner decide.'; }
   else if (signalsOf(lead).india && !active) { suggest = 'skip'; why = 'Located in India: strict screening. Skip unless there is clear evidence of active, structured training and decision-making authority.'; }
+  else if (size === 'big' && TRY_TEST.enabled && sizeOf(lead.employees).hi <= TRY_TEST.max_employees && !signalsOf(lead).training) {
+    suggest = 'try';
+    why = `Over 50 but up to ${TRY_TEST.max_employees} employees. Jay Shop-type TEST (awaiting Shiblu's yes): try it only if it trains its OWN staff, no LMS is found, there is a recurring training need and a path to the owner or an executive. Max ${TRY_TEST.per_person_per_week} per person per week.`;
+  }
   else if (size === 'big') { suggest = 'skip'; why = authority === 'low' ? 'Big company and a contact who cannot decide.' : 'Big company (over 50 employees).'; }
   else if (size === 'small') { suggest = 'nurture'; why = 'Under 10 employees.'; }
   else if (size === 'unknown') { suggest = 'qualify'; why = 'Headcount is missing or unclear.'; }
   else if (authority === 'low') { suggest = 'qualify'; why = 'Right size, but this contact probably cannot decide. Find the owner or CEO.'; }
   else if (authority === 'dm') { suggest = 'good'; why = 'Right size and a decision maker by title.'; }
   else { suggest = 'qualify'; why = 'Right size; check that this contact has authority.'; }
+  const tryTest = suggest === 'try';
   return {
     ...signalsOf(lead), nonprofit: nonprofitOf(lead),
     np_text: nonprofitOf(lead) ? 'Looks like a nonprofit or NGO: not excluded. Check where the money comes from (own earned income and contracts = good; mostly grants, donations or government = relationship only), whether they train their own staff, and who pays for the training.' : '',
     size, authority, suggest, why,
-    size_tone: SIZE_TEXT[size][0], size_text: SIZE_TEXT[size][1],
+    size_tone: tryTest ? 'amber' : SIZE_TEXT[size][0], size_text: tryTest ? 'Over 50 employees, up to 200: a Jay Shop-type test candidate (see the checklist).' : SIZE_TEXT[size][1],
     auth_tone: AUTH_TEXT[authority][0], auth_text: AUTH_TEXT[authority][1],
   };
 }

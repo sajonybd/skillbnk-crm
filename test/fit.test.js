@@ -67,3 +67,12 @@ test('location in India is screened by place, never by name', () => {
   const f = fitOf({ first_name: 'Anil', last_name: 'Bajnath', employees: '20', title: 'Founder', city: 'Troy', state: 'Michigan', country: 'United States' });
   assert.equal(f.suggest, 'good');
 });
+
+test('Jay Shop-type test: 51-200 own-staff companies are TRY, others stay skip', () => {
+  const base = { title: 'Director', stage: 'New', outreach_status: 'U' };
+  assert.equal(fitOf({ ...base, employees: '51-200', industry: 'restaurants', company: 'Evviva Trattoria' }).suggest, 'try');
+  assert.equal(fitOf({ ...base, employees: '150', industry: 'manufacturing', company: 'Acme Parts' }).suggest, 'try');
+  assert.equal(fitOf({ ...base, employees: '201-500', industry: 'pharmaceuticals', company: 'Accord' }).suggest, 'skip');
+  assert.equal(fitOf({ ...base, employees: '51-200', industry: 'e-learning', company: 'Northfield Training Academy' }).suggest, 'skip');
+  assert.equal(fitOf({ ...base, employees: '200+', industry: 'retail', company: 'Big Retail' }).suggest, 'skip');
+});
