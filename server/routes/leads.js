@@ -536,8 +536,8 @@ export function leadsRoutes(db) {
   }
 
   // One-click result of a planned step. The Plan page sends { result, kind } and this works out what to log and when
-  // the lead comes back: accepted | pending | sent | seen | replied | nurture | not_interested | snooze.
-  const RESULTS = ['comment', 'accepted', 'pending', 'sent', 'seen', 'replied', 'nurture', 'not_interested', 'snooze'];
+  // the lead comes back: accepted | pending | sent | seen | replied | nurture | not_interested | no_response | snooze.
+  const RESULTS = ['comment', 'accepted', 'pending', 'sent', 'seen', 'replied', 'nurture', 'not_interested', 'no_response', 'snooze'];
   r.post('/:id/step', (req, res) => {
     const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(Number(req.params.id));
     if (!lead) throw new HttpError(404, 'Lead not found');
@@ -582,6 +582,10 @@ export function leadsRoutes(db) {
         plan(addDays(today, rules.nurture_days), 'Nurture: like or comment on their posts, check back');
       } else if (result === 'not_interested') {
         applyChanges(lead, { outreach_status: 'NI' }, req.user);
+        plan('', '');
+      } else if (result === 'no_response') {
+        // Silence is not a refusal: close the lead but keep the lead type and outreach status, and say why.
+        applyChanges(lead, { stage: 'Closed', denial_reason: lead.denial_reason || 'No response' }, req.user);
         plan('', '');
       } else if (result === 'snooze') {
         snooze(addDays(today, Math.min(30, Math.max(1, Number(req.body.days) || 1))));

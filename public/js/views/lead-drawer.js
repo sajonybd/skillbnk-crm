@@ -310,6 +310,8 @@ export async function openLead(id, ctx, onChange = () => {}) {
         h('h3', null, 'Fit check (a suggestion, please verify)'),
         h('div', { class: 'fit-line' }, h('span', { class: 'fitchip ' + fit.size_tone }, 'Size'), fit.size_text),
         h('div', { class: 'fit-line' }, h('span', { class: 'fitchip ' + fit.auth_tone }, 'Title'), fit.auth_text),
+        h('div', { class: 'fit-line' }, h('span', { class: 'fitchip ' + fit.loc_tone }, 'Place'), fit.loc_text),
+        h('div', { class: 'fit-line' }, h('span', { class: 'fitchip ' + fit.train_tone }, 'Training'), fit.train_text),
         h('div', { class: 'fit-say' }, h('b', null, { skip: 'Suggest SKIP', nurture: 'Suggest NURTURE', qualify: 'Suggest QUALIFY', good: 'Looks good' }[fit.suggest]), ': ' + fit.why),
         h('div', { class: 'sub' }, 'Based on the headcount and job title recorded in the CRM (they may be old). Nothing changes until you decide.')) : null,
       h('section', null, h('h3', null, 'Pipeline'),

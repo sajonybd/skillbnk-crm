@@ -79,7 +79,7 @@ export function buildLeadPrompt({ lead: l, fit, guide, activities, meetings, lin
     `Today's question: ${v(l.todays_question)}`, `Denial reason: ${v(l.denial_reason)}`, `Next action: ${l.next_action || l.next_action_date ? [l.next_action, l.next_action_date && '(' + l.next_action_date + ')'].filter(Boolean).join(' ') : 'not in CRM'}`,
     `Invite sent: ${v(l.invite_sent_date)} | Accepted: ${v(l.accepted_date)} | First DM: ${v(l.first_dm_date)}`, `Notes: ${v(l.notes)}`);
   if (links.length) L.push('', 'Saved links:', ...links.map((k) => `- ${k.label || k.kind}: ${k.url}`));
-  L.push('', 'CRM fit hint (a suggestion from headcount and job title only, not a verdict):', fit ? `- ${fit.size_text}\n- ${fit.auth_text}\n- Suggestion: ${fit.suggest.toUpperCase()} (${fit.why})` : '- none');
+  L.push('', 'CRM fit hint (a suggestion from headcount and job title, plus place and training signals for information; not a verdict. Location never qualifies a lead):', fit ? `- ${fit.size_text}\n- ${fit.auth_text}\n- Place: ${fit.loc_text}\n- Training: ${fit.train_text}\n- Suggestion: ${fit.suggest.toUpperCase()} (${fit.why})` : '- none');
   if (guide) {
     L.push('', "NEXT STEP the CRM suggests (from this lead's history and the follow-up schedule; a person decides):",
       `- Do: ${guide.action}${guide.channel ? ' [' + guide.channel + ']' : ''}`, `- Why: ${guide.why}`);

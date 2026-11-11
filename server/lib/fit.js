@@ -49,6 +49,24 @@ const AUTH_TEXT = {
   unknown: ['grey', 'Title does not show authority: check it.'],
 };
 
+// Extra signals, shown for information only. They never change the suggestion (location never qualifies a lead).
+const MI = /\b(michigan|mich\.?)\b/i;
+const TRAIN = /\b(train(ing|er|ers)?|learning|academy|coach(es|ing)?|education(al)?|school|workforce|instruct(ion|or|ors)?|certification|skills?|l&d|upskill\w*|onboarding)\b/i;
+export function signalsOf(lead) {
+  const state = String(lead.state || '').trim();
+  const place = [lead.city, lead.state, lead.country].filter(Boolean).join(', ');
+  const mi = MI.test(place) || /^mi$/i.test(state);
+  const us = /united states|usa|^us$/i.test(String(lead.country || '')) || (!lead.country && !!state);
+  const loc = mi ? ['green', 'Michigan: first priority. Verify the location before writing "fellow Michigander".']
+    : us ? ['amber', `Elsewhere in the USA${place ? ' (' + place + ')' : ''}: nurture and relationship first; no meeting without a conversation.`]
+    : place ? ['amber', `Outside the USA (${place}): needs the owner's approval; India gets strict screening.`]
+    : ['grey', 'Location not recorded: find it.'];
+  const tr = TRAIN.test([lead.industry, lead.company].join(' '))
+    ? ['green', 'Training-related by industry or company name. Check: do they SELL training (a provider) or train their own staff?']
+    : ['grey', 'No training signal in the industry or company name: check what they do.'];
+  return { loc_tone: loc[0], loc_text: loc[1], michigan: mi, train_tone: tr[0], train_text: tr[1], training: tr[0] === 'green' };
+}
+
 // One suggestion from the two signals. A person confirms it.
 export function fitOf(lead) {
   const size = sizeOf(lead.employees).band;
@@ -61,6 +79,7 @@ export function fitOf(lead) {
   else if (authority === 'dm') { suggest = 'good'; why = 'Right size and a decision maker by title.'; }
   else { suggest = 'qualify'; why = 'Right size; check that this contact has authority.'; }
   return {
+    ...signalsOf(lead),
     size, authority, suggest, why,
     size_tone: SIZE_TEXT[size][0], size_text: SIZE_TEXT[size][1],
     auth_tone: AUTH_TEXT[authority][0], auth_text: AUTH_TEXT[authority][1],

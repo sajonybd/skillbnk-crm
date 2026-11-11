@@ -37,3 +37,12 @@ test('fit: one suggestion from size and title (a hint, never a verdict)', () => 
   assert.equal(fitOf({ employees: '25', title: 'Director of L&D' }).suggest, 'qualify');
   assert.equal(fitOf({ employees: '25', title: 'Owner' }).suggest, 'good');
 });
+
+import { signalsOf } from '../server/lib/fit.js';
+test('place and training signals', () => {
+  const a = signalsOf({ city: 'Troy', state: 'Michigan', country: 'United States', industry: 'management consulting', company: 'WhizBang! Retail Training' });
+  assert.equal(a.michigan, true); assert.equal(a.training, true); assert.equal(a.loc_tone, 'green');
+  const b = signalsOf({ state: 'Ohio', country: 'United States', industry: 'logistics', company: 'Northfield Logistics' });
+  assert.equal(b.michigan, false); assert.equal(b.training, false); assert.equal(b.loc_tone, 'amber');
+  assert.equal(signalsOf({}).loc_tone, 'grey');
+});

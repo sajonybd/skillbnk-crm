@@ -18,7 +18,7 @@ const BUTTONS = {
   no_email: [['sent', 'Commented / form sent', 'primary', { kind: 'email' }], ['accepted', 'They accepted', ''], ['snooze', 'Later', '']],
   research: [['snooze', 'Later', ''], ['nurture', 'Nurture', ''], ['not_interested', 'Not a fit', '']],
 };
-const DONE_TEXT = { comment: 'Comment logged', sent: 'Logged as sent', accepted: 'Marked accepted', pending: 'Still pending, back in 3 days', seen: 'Marked seen, no reply', replied: 'Marked replied', nurture: 'Moved to nurture', not_interested: 'Closed', snooze: 'Pushed to tomorrow' };
+const DONE_TEXT = { comment: 'Comment logged', sent: 'Logged as sent', accepted: 'Marked accepted', pending: 'Still pending, back in 3 days', seen: 'Marked seen, no reply', replied: 'Marked replied', nurture: 'Moved to nurture', not_interested: 'Closed', no_response: 'Closed: no response', snooze: 'Pushed to tomorrow' };
 
 
 // Fills `root` with the follow-ups or the stale pile for one person. onChange runs after anything is saved.
@@ -81,20 +81,20 @@ export async function renderFollowups(root, ctx, { assignee, view, onChange }) {
     const box = h('div', { class: 'card pcard stale' }, h('div', { class: 'pc-title' }, icon('clock', 16), h('h3', null, `${m.summary.stale} stale leads`), h('span', { class: 'muted' }, 'more than 14 days late')));
     if (!m.stale.length) { box.append(h('div', { class: 'empty' }, 'No stale leads. Nothing is more than 14 days behind.')); return box; }
     const bulk = async (result) => {
-      if (!confirm(`${result === 'nurture' ? 'Move to nurture' : 'Close'} all ${m.stale.length} stale leads? They leave the daily plan.`)) return;
+      if (!confirm(`${result === 'nurture' ? 'Move to nurture' : 'Close as "no response"'} all ${m.stale.length} stale leads? They leave the daily plan.`)) return;
       let n = 0;
       for (const x of m.stale) { try { await api('POST', `/api/leads/${x.id}/step`, { result }); n++; } catch { /* skip */ } }
-      toast(`${n} stale leads ${result === 'nurture' ? 'moved to nurture' : 'closed'}`);
+      toast(`${n} stale leads ${result === 'nurture' ? 'moved to nurture' : 'closed: no response'}`);
       onChange();
     };
     box.append(
-      h('div', { class: 'muted', style: 'margin-bottom:10px' }, 'These steps were missed long ago, so they are not follow-ups any more. Nurture = like and comment on their posts and check back in 30 days. Close = not interested.'),
-      h('div', { class: 'row', style: 'margin-bottom:10px' }, h('button', { class: 'btn primary small', onclick: () => bulk('nurture') }, `Nurture all ${m.stale.length}`), h('button', { class: 'btn small', onclick: () => bulk('not_interested') }, `Close all ${m.stale.length}`)));
+      h('div', { class: 'muted', style: 'margin-bottom:10px' }, 'These steps were missed long ago, so they are not follow-ups any more. Silence is not a refusal. Nurture = like and comment on their posts and check back in 30 days (best for good-fit leads: Michigan, 10–50 employees, training-related). Close: no response = stop for now; the lead stays in the CRM and can be reopened. It is not "Not a fit" and not "Not interested".'),
+      h('div', { class: 'row', style: 'margin-bottom:10px' }, h('button', { class: 'btn primary small', onclick: () => bulk('nurture') }, `Nurture all ${m.stale.length}`), h('button', { class: 'btn small', onclick: () => bulk('no_response') }, `Close all ${m.stale.length}: no response`)));
     for (const x of m.stale.slice(0, 100)) {
       const row = h('div', { class: 'stale-row' });
       const one = async (result) => { try { await api('POST', `/api/leads/${x.id}/step`, { result }); row.remove(); toast(`${x.name}: ${DONE_TEXT[result]}`); onChange(); } catch (e) { toast(e.message, true); } };
       fill(row, h('div', { style: 'cursor:pointer;min-width:0', onclick: () => openLead(x.id, ctx, () => onChange()) }, h('div', { class: 'nm' }, x.name), h('div', { class: 'sub' }, [x.title, x.company].filter(Boolean).join(' · ')), h('div', { class: 'sub due' }, `${x.verb} · ${x.late_days}d late`)),
-        h('div', { class: 'row', style: 'gap:6px;flex-wrap:nowrap' }, h('button', { class: 'btn small', onclick: () => one('nurture') }, 'Nurture'), h('button', { class: 'btn small', onclick: () => one('not_interested') }, 'Close')));
+        h('div', { class: 'row', style: 'gap:6px;flex-wrap:nowrap' }, h('button', { class: 'btn small', onclick: () => one('nurture') }, 'Nurture 30 days'), h('button', { class: 'btn small', onclick: () => one('no_response') }, 'Close: no response')));
       box.append(row);
     }
     if (m.stale.length > 100) box.append(h('div', { class: 'carry' }, `…and ${m.stale.length - 100} more (the bulk buttons cover all ${m.stale.length}).`));
