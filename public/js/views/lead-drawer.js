@@ -363,24 +363,19 @@ export function openNewLead(ctx, onCreated) {
   inputs.first_name.focus();
 }
 
-// Two buttons for one AI chat: the setup is pasted once, then each lead is pasted on its own.
+// One button per lead. The AI setup (rules) is copied once from the Playbook page.
 function aiBtn(id) {
-  const mk = (cls, label, tip, url, done) => {
-    const b = h('button', { class: 'btn small ' + cls, title: tip }, icon('copy', 14), label);
-    b.onclick = async () => {
-      try {
-        b.disabled = true;
-        const r = await api('GET', url);
-        await copyPlain(r.prompt);
-        toast(done(r));
-      } catch (e) { toast(e.message, true); }
-      b.disabled = false;
-    };
-    return b;
+  const b = h('button', { class: 'btn small primary', title: 'Paste this lead into your AI chat (set the chat up once from the Playbook page)' }, icon('copy', 14), 'Copy lead for AI');
+  b.onclick = async () => {
+    try {
+      b.disabled = true;
+      const r = await api('GET', `/api/leads/${id}/ai-prompt`);
+      await copyPlain(r.prompt);
+      toast(`Lead copied (${Math.round(r.chars / 1000)}k characters). Paste it in your AI chat.`);
+    } catch (e) { toast(e.message, true); }
+    b.disabled = false;
   };
-  return h('div', { class: 'row', style: 'gap:6px;justify-content:flex-end' },
-    mk('', 'AI setup (once)', 'Paste this once at the start of your AI chat: our rules and how to answer', '/api/leads/ai-setup', (r) => `AI setup copied (${Math.round(r.chars / 1000)}k characters). Paste it ONCE at the start of the chat.`),
-    mk('primary', 'Copy lead for AI', 'Paste this lead into the same AI chat, after the setup', `/api/leads/${id}/ai-prompt`, (r) => `Lead copied (${Math.round(r.chars / 1000)}k characters). Paste it in the AI chat.`));
+  return b;
 }
 async function copyPlain(text) {
   try { await navigator.clipboard.writeText(text); }

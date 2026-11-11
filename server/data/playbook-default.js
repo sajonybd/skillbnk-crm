@@ -23,7 +23,7 @@ export const DEFAULT_PLAYBOOK = `# skillBNK outreach rules
 4. Do your **team tasks** and tick them off.
 5. Work week is Sunday to Saturday. **Friday is the day off.** Sunday is mainly content, planning and follow-ups, not new connections.
 6. End of day: **Reports → End-of-day update**, copy it and submit.
-7. To research a lead: open it and use **AI setup (once)** at the start of your AI chat, then **Copy lead for AI** for each lead. Check what the AI says, then update the lead.
+7. To research a lead: at the start of your AI chat press **Copy AI setup** on this Playbook page once, then press **Copy lead for AI** on each lead. Check what the AI says, then update the lead.
 
 ## The follow-up cadence (numbers are on the Rules tab)
 - **Day 0**: connection request, 300 characters or fewer, no offer.

@@ -24,7 +24,14 @@ export async function render(root, ctx) {
     const view = h('div');
     const show = () => fill(view, h('div', { class: 'muted', style: 'margin-bottom:8px' }, data.updated_at ? `Last updated ${fmtDateTime(data.updated_at)} by ${data.updated_by}` : 'Default text. Not edited yet.'), renderMd(data.markdown));
     show();
-    const actions = isAdmin ? h('div', { class: 'rep-bar' }, h('button', { class: 'btn primary', onclick: edit }, 'Edit plan text')) : null;
+    const setupBtn = h('button', { class: 'btn', title: 'Paste this once at the start of your AI chat. Then use "Copy lead for AI" on each lead.', onclick: async () => {
+      try {
+        const r = await api('GET', '/api/leads/ai-setup');
+        try { await navigator.clipboard.writeText(r.prompt); } catch { const t = h('textarea', { style: 'position:fixed;opacity:0' }); t.value = r.prompt; document.body.append(t); t.select(); document.execCommand('copy'); t.remove(); }
+        toast(`AI setup copied (${Math.round(r.chars / 1000)}k characters). Paste it once at the start of your AI chat.`);
+      } catch (e) { toast(e.message, true); }
+    } }, 'Copy AI setup (once per chat)');
+    const actions = h('div', { class: 'rep-bar' }, setupBtn, isAdmin ? h('button', { class: 'btn primary', onclick: edit }, 'Edit plan text') : null);
     function edit() {
       const ta = h('textarea', { rows: 28, style: 'width:100%;font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.5' });
       ta.value = data.markdown;
