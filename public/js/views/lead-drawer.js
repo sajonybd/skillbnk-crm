@@ -291,7 +291,9 @@ export async function openLead(id, ctx, onChange = () => {}) {
           h('div', { class: 'muted' }, [l.title, l.company].filter(Boolean).join(' · ')),
           h('div', { class: 'row', style: 'margin-top:6px' }, pill(l.stage, 's'), pill(l.quality, 'q'), l.owner_name ? h('span', { class: 'muted' }, 'Owner: ' + l.owner_name) : null),
           linkRow),
-        h('button', { class: 'btn small', onclick: closeAndNotify }, icon('x', 14), 'Close')),
+        h('div', { class: 'col', style: 'gap:6px;align-items:flex-end' },
+          h('button', { class: 'btn small', onclick: closeAndNotify }, icon('x', 14), 'Close'),
+          aiBtn(id))),
       fit ? h('section', { class: 'fitbox ' + (fit.suggest === 'skip' ? 'red' : fit.suggest === 'good' ? 'green' : 'amber') },
         h('h3', null, 'Fit check (a suggestion, please verify)'),
         h('div', { class: 'fit-line' }, h('span', { class: 'fitchip ' + fit.size_tone }, 'Size'), fit.size_text),
@@ -347,4 +349,23 @@ export function openNewLead(ctx, onCreated) {
       h('div', { class: 'field' }, h('label', null, 'Owner'), owner)),
       h('div', { style: 'margin-top:14px' }, create)));
   inputs.first_name.focus();
+}
+
+// "Copy AI prompt": the rules plus everything the CRM knows about the lead, ready to paste into an AI chat.
+function aiBtn(id) {
+  const b = h('button', { class: 'btn small primary', title: 'Copies the rules and this lead\'s details, to paste into an AI chat for research' }, icon('copy', 14), 'Copy AI prompt');
+  b.onclick = async () => {
+    try {
+      b.disabled = true;
+      const { prompt, chars, rules_source } = await api('GET', `/api/leads/${id}/ai-prompt`);
+      await copyPlain(prompt);
+      toast(`AI prompt copied (${Math.round(chars / 1000)}k characters, rules: ${rules_source}). Paste it in your AI chat.`);
+    } catch (e) { toast(e.message, true); }
+    b.disabled = false;
+  };
+  return b;
+}
+async function copyPlain(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch { const t = h('textarea', { style: 'position:fixed;opacity:0' }); t.value = text; document.body.append(t); t.select(); document.execCommand('copy'); t.remove(); }
 }
