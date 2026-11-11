@@ -11,7 +11,7 @@ import { createMeeting } from '../lib/meetings.js';
 import { todayLocal, addDays } from '../lib/kpi.js';
 import { nextStep } from '../lib/cadence.js';
 import { getRules } from '../lib/rules.js';
-import { buildAiPrompt } from '../lib/ai-prompt.js';
+import { buildSetup, buildLeadPrompt } from '../lib/ai-prompt.js';
 import { guideOf, countsFor } from '../lib/guide.js';
 
 const TEXT_FIELDS = [
@@ -411,6 +411,11 @@ export function leadsRoutes(db) {
     res.json({ counts: f, rates, byStatus: by('outreach_status'), byCategory: by('lead_category'), byPath: by('quality'), byTier: by('tier') });
   });
 
+  // Paste once at the start of an AI chat: who we are, the rulebook and how to answer.
+  r.get('/ai-setup', (req, res) => {
+    res.json(buildSetup({ playbook: db.prepare("SELECT value FROM settings WHERE key = 'playbook_md'").get()?.value }));
+  });
+
   r.get('/:id', (req, res) => {
     const lead = db.prepare('SELECT l.*, u.name AS owner_name, d.name AS deleted_by_name FROM leads l LEFT JOIN users u ON u.id = l.owner_id LEFT JOIN users d ON d.id = l.deleted_by WHERE l.id = ?').get(Number(req.params.id));
     if (!lead) throw new HttpError(404, 'Lead not found');
@@ -428,7 +433,7 @@ export function leadsRoutes(db) {
     res.json({ lead, fit, guide: guideOf(lead, { fit, counts: countsFor(db, lead.id), today: todayLocal(), rules: getRules(db) }), activities, meetings, links });
   });
 
-  // Ready-to-paste research brief for an AI chat: rules + everything the CRM knows about this lead.
+  // One lead for that chat: everything the CRM knows, the suggested next step and a place for your own findings.
   r.get('/:id/ai-prompt', (req, res) => {
     const id = Number(req.params.id);
     const lead = db.prepare('SELECT l.*, u.name AS owner_name FROM leads l LEFT JOIN users u ON u.id = l.owner_id WHERE l.id = ?').get(id);
@@ -436,10 +441,9 @@ export function leadsRoutes(db) {
     const activities = db.prepare('SELECT a.type, a.note, a.created_at, u.name AS user_name FROM activities a JOIN users u ON u.id = a.user_id WHERE a.lead_id = ? ORDER BY a.created_at DESC, a.id DESC LIMIT 60').all(id);
     const meetings = db.prepare('SELECT m.*, b.name AS booked_by_name FROM meetings m LEFT JOIN users b ON b.id = m.booked_by WHERE m.lead_id = ? ORDER BY m.scheduled_date DESC').all(id);
     const links = db.prepare('SELECT kind, label, url FROM lead_links WHERE lead_id = ? ORDER BY id').all(id);
-    const saved = db.prepare("SELECT value FROM settings WHERE key = 'playbook_md'").get()?.value;
     const fit = fitOf(lead);
     const guide = guideOf(lead, { fit, counts: countsFor(db, id), today: todayLocal(), rules: getRules(db) });
-    res.json(buildAiPrompt({ lead, fit, guide, activities, meetings, links, playbook: saved, user: req.user }));
+    res.json(buildLeadPrompt({ lead, fit, guide, activities, meetings, links }));
   });
 
   const liveLead = (id) => {

@@ -296,7 +296,7 @@ export async function openLead(id, ctx, onChange = () => {}) {
           h('div', { class: 'muted' }, [l.title, l.company].filter(Boolean).join(' · ')),
           h('div', { class: 'row', style: 'margin-top:6px' }, pill(l.stage, 's'), pill(l.quality, 'q'), l.owner_name ? h('span', { class: 'muted' }, 'Owner: ' + l.owner_name) : null),
           linkRow),
-        h('div', { class: 'col', style: 'gap:6px;align-items:flex-end' },
+        h('div', { class: 'col', style: 'gap:6px;align-items:flex-end;flex-shrink:0' },
           h('button', { class: 'btn small', onclick: closeAndNotify }, icon('x', 14), 'Close'),
           aiBtn(id))),
       guide && guide.kind !== 'none' ? h('section', { class: 'nextbox' + (guide.late_days ? ' late' : '') },
@@ -363,19 +363,24 @@ export function openNewLead(ctx, onCreated) {
   inputs.first_name.focus();
 }
 
-// "Copy AI prompt": the rules plus everything the CRM knows about the lead, ready to paste into an AI chat.
+// Two buttons for one AI chat: the setup is pasted once, then each lead is pasted on its own.
 function aiBtn(id) {
-  const b = h('button', { class: 'btn small primary', title: 'Copies the rules and this lead\'s details, to paste into an AI chat for research' }, icon('copy', 14), 'Copy AI prompt');
-  b.onclick = async () => {
-    try {
-      b.disabled = true;
-      const { prompt, chars, rules_source } = await api('GET', `/api/leads/${id}/ai-prompt`);
-      await copyPlain(prompt);
-      toast(`AI prompt copied (${Math.round(chars / 1000)}k characters, rules: ${rules_source}). Paste it in your AI chat.`);
-    } catch (e) { toast(e.message, true); }
-    b.disabled = false;
+  const mk = (cls, label, tip, url, done) => {
+    const b = h('button', { class: 'btn small ' + cls, title: tip }, icon('copy', 14), label);
+    b.onclick = async () => {
+      try {
+        b.disabled = true;
+        const r = await api('GET', url);
+        await copyPlain(r.prompt);
+        toast(done(r));
+      } catch (e) { toast(e.message, true); }
+      b.disabled = false;
+    };
+    return b;
   };
-  return b;
+  return h('div', { class: 'row', style: 'gap:6px;justify-content:flex-end' },
+    mk('', 'AI setup (once)', 'Paste this once at the start of your AI chat: our rules and how to answer', '/api/leads/ai-setup', (r) => `AI setup copied (${Math.round(r.chars / 1000)}k characters). Paste it ONCE at the start of the chat.`),
+    mk('primary', 'Copy lead for AI', 'Paste this lead into the same AI chat, after the setup', `/api/leads/${id}/ai-prompt`, (r) => `Lead copied (${Math.round(r.chars / 1000)}k characters). Paste it in the AI chat.`));
 }
 async function copyPlain(text) {
   try { await navigator.clipboard.writeText(text); }
