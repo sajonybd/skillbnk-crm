@@ -68,11 +68,18 @@ test('location in India is screened by place, never by name', () => {
   assert.equal(f.suggest, 'good');
 });
 
-test('Jay Shop-type test: 51-200 own-staff companies are TRY, others stay skip', () => {
+test('Own-staff training test: 51-200 own-staff companies are TRY, others stay skip', () => {
   const base = { title: 'Director', stage: 'New', outreach_status: 'U' };
   assert.equal(fitOf({ ...base, employees: '51-200', industry: 'restaurants', company: 'Evviva Trattoria' }).suggest, 'try');
   assert.equal(fitOf({ ...base, employees: '150', industry: 'manufacturing', company: 'Acme Parts' }).suggest, 'try');
   assert.equal(fitOf({ ...base, employees: '201-500', industry: 'pharmaceuticals', company: 'Accord' }).suggest, 'skip');
   assert.equal(fitOf({ ...base, employees: '51-200', industry: 'e-learning', company: 'Northfield Training Academy' }).suggest, 'skip');
   assert.equal(fitOf({ ...base, employees: '200+', industry: 'retail', company: 'Big Retail' }).suggest, 'skip');
+});
+
+test('competitor: LMS or e-learning software company is skip', () => {
+  const r = fitOf({ company: 'Acme Learning Management Systems', industry: 'Computer Software', employees: '11-50', title: 'CEO' });
+  assert.equal(r.suggest, 'skip');
+  assert.equal(r.competitor, true);
+  assert.equal(fitOf({ company: 'Acme Plumbing', industry: 'Construction', employees: '11-50', title: 'CEO' }).competitor, false);
 });

@@ -59,6 +59,7 @@ export function signalsOf(lead) {
   const mi = MI.test(place) || /^mi$/i.test(state);
   const us = /united states|usa|^us$/i.test(String(lead.country || '')) || (!lead.country && !!state);
   const india = /\bindia\b/i.test(place);
+  const competitor = COMPETITOR.test([lead.industry, lead.company, lead.title].join(' '));
   const loc = india ? ['red', 'India: strict screening (C19). Suggest SKIP unless there is clear evidence of active, structured training and decision-making authority.']
     : mi ? ['green', 'Michigan: first priority. Verify the location before writing "fellow Michigander".']
     : us ? ['amber', `Elsewhere in the USA${place ? ' (' + place + ')' : ''}: nurture and relationship first; no meeting without a conversation.`]
@@ -67,10 +68,12 @@ export function signalsOf(lead) {
   const tr = TRAIN.test([lead.industry, lead.company].join(' '))
     ? ['green', 'Training-related by industry or company name. Check: do they SELL training (a provider) or train their own staff?']
     : ['grey', 'No training signal in the industry or company name: check what they do.'];
-  return { loc_tone: loc[0], loc_text: loc[1], michigan: mi, india, train_tone: tr[0], train_text: tr[1], training: tr[0] === 'green' };
+  return { competitor, loc_tone: loc[0], loc_text: loc[1], michigan: mi, india, train_tone: tr[0], train_text: tr[1], training: tr[0] === 'green' };
 }
 
-// Nonprofit / NGO: not excluded. What matters is where the money comes from (Jay Shop: own earned income; Social Purpose Corrections: donations).
+// Competitors: companies that sell an LMS, e-learning or course-platform software. Not customers.
+const COMPETITOR = /\b(lms|learning management|learning platform|e-?learning (platform|software|solutions?)|online course (platform|software)|course (platform|software)|training (software|platform)|ed-?tech|learning (technology|software))\b/i;
+// Nonprofit / NGO: not excluded. What matters is where the money comes from (own earned income is good; donations are relationship only).
 const NONPROFIT = /\b(non-?profits?|ngo|foundation|charit(y|ies|able)|associations?|philanthrop\w*|volunteer\w*|community (services|development|organization))\b/i;
 export function nonprofitOf(lead) {
   return NONPROFIT.test([lead.industry, lead.company].join(' '));
@@ -84,10 +87,11 @@ export function fitOf(lead) {
   // The big-company rule is for COLD outreach. A lead already in conversation, with a meeting, or past it, is an active relationship.
   const active = ['R', 'M'].includes(lead.outreach_status) || ['Replied', 'Meeting Booked', 'Meeting Done'].includes(lead.stage);
   if (size === 'big' && active) { suggest = 'qualify'; why = 'Over 50 employees, but already in an active conversation or meeting. The size rule is for cold outreach: do not close it. Continue and let the owner decide.'; }
+  else if (signalsOf(lead).competitor && !active) { suggest = 'skip'; why = 'Looks like an LMS or e-learning software company: a competitor of skillBNK. Skip as a customer. Verify on the website first; if it is a real fit as a partner, ask the owner.'; }
   else if (signalsOf(lead).india && !active) { suggest = 'skip'; why = 'Located in India: strict screening. Skip unless there is clear evidence of active, structured training and decision-making authority.'; }
   else if (size === 'big' && TRY_TEST.enabled && sizeOf(lead.employees).hi <= TRY_TEST.max_employees && !signalsOf(lead).training) {
     suggest = 'try';
-    why = `Over 50 but up to ${TRY_TEST.max_employees} employees. Jay Shop-type TEST (awaiting Shiblu's yes): try it only if it trains its OWN staff, no LMS is found, there is a recurring training need and a path to the owner or an executive. Max ${TRY_TEST.per_person_per_week} per person per week.`;
+    why = `Over 50 but up to ${TRY_TEST.max_employees} employees. Own-staff training TEST (awaiting Shiblu's yes): try it only if it trains its OWN staff, no LMS is found, there is a recurring training need and a path to the owner or an executive. Max ${TRY_TEST.per_person_per_week} per person per week.`;
   }
   else if (size === 'big') { suggest = 'skip'; why = authority === 'low' ? 'Big company and a contact who cannot decide.' : 'Big company (over 50 employees).'; }
   else if (size === 'small') { suggest = 'nurture'; why = 'Under 10 employees.'; }
@@ -100,7 +104,7 @@ export function fitOf(lead) {
     ...signalsOf(lead), nonprofit: nonprofitOf(lead),
     np_text: nonprofitOf(lead) ? 'Looks like a nonprofit or NGO: not excluded. Check where the money comes from (own earned income and contracts = good; mostly grants, donations or government = relationship only), whether they train their own staff, and who pays for the training.' : '',
     size, authority, suggest, why,
-    size_tone: tryTest ? 'amber' : SIZE_TEXT[size][0], size_text: tryTest ? 'Over 50 employees, up to 200: a Jay Shop-type test candidate (see the checklist).' : SIZE_TEXT[size][1],
+    size_tone: tryTest ? 'amber' : SIZE_TEXT[size][0], size_text: tryTest ? 'Over 50 employees, up to 200: an own-staff training test candidate (see the checklist).' : SIZE_TEXT[size][1],
     auth_tone: AUTH_TEXT[authority][0], auth_text: AUTH_TEXT[authority][1],
   };
 }
