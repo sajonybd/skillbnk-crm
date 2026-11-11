@@ -59,3 +59,11 @@ test('nonprofit signal', () => {
   assert.equal(nonprofitOf({ industry: 'nonprofit organization management', company: 'Jay Shop, Inc.' }), true);
   assert.equal(nonprofitOf({ industry: 'logistics', company: 'Northfield Logistics' }), false);
 });
+
+test('location in India is screened by place, never by name', () => {
+  assert.equal(fitOf({ employees: '20', title: 'Founder', country: 'India', stage: 'New' }).suggest, 'skip');
+  assert.equal(fitOf({ employees: '20', title: 'Founder', country: 'India', stage: 'Replied', outreach_status: 'R' }).suggest, 'good');
+  // an Indian name in the USA is judged like anyone else
+  const f = fitOf({ first_name: 'Anil', last_name: 'Bajnath', employees: '20', title: 'Founder', city: 'Troy', state: 'Michigan', country: 'United States' });
+  assert.equal(f.suggest, 'good');
+});

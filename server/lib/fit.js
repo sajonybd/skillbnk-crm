@@ -57,14 +57,16 @@ export function signalsOf(lead) {
   const place = [lead.city, lead.state, lead.country].filter(Boolean).join(', ');
   const mi = MI.test(place) || /^mi$/i.test(state);
   const us = /united states|usa|^us$/i.test(String(lead.country || '')) || (!lead.country && !!state);
-  const loc = mi ? ['green', 'Michigan: first priority. Verify the location before writing "fellow Michigander".']
+  const india = /\bindia\b/i.test(place);
+  const loc = india ? ['red', 'India: strict screening (C19). Suggest SKIP unless there is clear evidence of active, structured training and decision-making authority.']
+    : mi ? ['green', 'Michigan: first priority. Verify the location before writing "fellow Michigander".']
     : us ? ['amber', `Elsewhere in the USA${place ? ' (' + place + ')' : ''}: nurture and relationship first; no meeting without a conversation.`]
     : place ? ['amber', `Outside the USA (${place}): needs the owner's approval; India gets strict screening.`]
     : ['grey', 'Location not recorded: find it.'];
   const tr = TRAIN.test([lead.industry, lead.company].join(' '))
     ? ['green', 'Training-related by industry or company name. Check: do they SELL training (a provider) or train their own staff?']
     : ['grey', 'No training signal in the industry or company name: check what they do.'];
-  return { loc_tone: loc[0], loc_text: loc[1], michigan: mi, train_tone: tr[0], train_text: tr[1], training: tr[0] === 'green' };
+  return { loc_tone: loc[0], loc_text: loc[1], michigan: mi, india, train_tone: tr[0], train_text: tr[1], training: tr[0] === 'green' };
 }
 
 // Nonprofit / NGO: not excluded. What matters is where the money comes from (Jay Shop: own earned income; Social Purpose Corrections: donations).
@@ -81,6 +83,7 @@ export function fitOf(lead) {
   // The big-company rule is for COLD outreach. A lead already in conversation, with a meeting, or past it, is an active relationship.
   const active = ['R', 'M'].includes(lead.outreach_status) || ['Replied', 'Meeting Booked', 'Meeting Done'].includes(lead.stage);
   if (size === 'big' && active) { suggest = 'qualify'; why = 'Over 50 employees, but already in an active conversation or meeting. The size rule is for cold outreach: do not close it. Continue and let the owner decide.'; }
+  else if (signalsOf(lead).india && !active) { suggest = 'skip'; why = 'Located in India: strict screening. Skip unless there is clear evidence of active, structured training and decision-making authority.'; }
   else if (size === 'big') { suggest = 'skip'; why = authority === 'low' ? 'Big company and a contact who cannot decide.' : 'Big company (over 50 employees).'; }
   else if (size === 'small') { suggest = 'nurture'; why = 'Under 10 employees.'; }
   else if (size === 'unknown') { suggest = 'qualify'; why = 'Headcount is missing or unclear.'; }
