@@ -313,7 +313,7 @@ export async function openLead(id, ctx, onChange = () => {}) {
         h('div', { class: 'fit-line' }, h('span', { class: 'fitchip ' + fit.loc_tone }, 'Place'), fit.loc_text),
         h('div', { class: 'fit-line' }, h('span', { class: 'fitchip ' + fit.train_tone }, 'Training'), fit.train_text),
         fit.nonprofit ? h('div', { class: 'fit-line' }, h('span', { class: 'fitchip amber' }, 'Nonprofit'), fit.np_text) : null,
-        h('div', { class: 'fit-say' }, h('b', null, { skip: 'Suggest SKIP', nurture: 'Suggest NURTURE', qualify: 'Suggest QUALIFY', try: 'Own-staff training TEST', good: 'Looks good' }[fit.suggest]), ': ' + fit.why),
+        h('div', { class: 'fit-say' }, h('b', null, { skip: 'Suggest SKIP', nurture: 'Suggest NURTURE', qualify: 'Suggest QUALIFY', try: 'Company employee training', good: 'Looks good' }[fit.suggest]), ': ' + fit.why),
         h('div', { class: 'sub' }, 'Based on the headcount and job title recorded in the CRM (they may be old). Nothing changes until you decide.')) : null,
       h('section', null, h('h3', null, 'Pipeline'),
         h('div', { class: 'grid2' },

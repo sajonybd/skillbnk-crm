@@ -68,7 +68,7 @@ test('location in India is screened by place, never by name', () => {
   assert.equal(f.suggest, 'good');
 });
 
-test('Own-staff training test: 51-200 own-staff companies are TRY, others stay skip', () => {
+test('Company employee training: 51-200 own-staff companies are TRY, others stay skip', () => {
   const base = { title: 'Director', stage: 'New', outreach_status: 'U' };
   assert.equal(fitOf({ ...base, employees: '51-200', industry: 'restaurants', company: 'Evviva Trattoria' }).suggest, 'try');
   assert.equal(fitOf({ ...base, employees: '150', industry: 'manufacturing', company: 'Acme Parts' }).suggest, 'try');

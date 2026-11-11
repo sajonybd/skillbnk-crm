@@ -91,7 +91,7 @@ export function fitOf(lead) {
   else if (signalsOf(lead).india && !active) { suggest = 'skip'; why = 'Located in India: strict screening. Skip unless there is clear evidence of active, structured training and decision-making authority.'; }
   else if (size === 'big' && TRY_TEST.enabled && sizeOf(lead.employees).hi <= TRY_TEST.max_employees && !signalsOf(lead).training) {
     suggest = 'try';
-    why = `Over 50 but up to ${TRY_TEST.max_employees} employees. Own-staff training TEST (awaiting Shiblu's yes): try it only if it trains its OWN staff, no LMS is found, there is a recurring training need and a path to the owner or an executive. Max ${TRY_TEST.per_person_per_week} per person per week.`;
+    why = `Over 50 but up to ${TRY_TEST.max_employees} employees. Company employee training (awaiting Shiblu's yes): try it only if it trains its OWN staff, no LMS is found, there is a recurring training need and a path to the owner or an executive. Max ${TRY_TEST.per_person_per_week} per person per week.`;
   }
   else if (size === 'big') { suggest = 'skip'; why = authority === 'low' ? 'Big company and a contact who cannot decide.' : 'Big company (over 50 employees).'; }
   else if (size === 'small') { suggest = 'nurture'; why = 'Under 10 employees.'; }
@@ -104,7 +104,7 @@ export function fitOf(lead) {
     ...signalsOf(lead), nonprofit: nonprofitOf(lead),
     np_text: nonprofitOf(lead) ? 'Looks like a nonprofit or NGO: not excluded. Check where the money comes from (own earned income and contracts = good; mostly grants, donations or government = relationship only), whether they train their own staff, and who pays for the training.' : '',
     size, authority, suggest, why,
-    size_tone: tryTest ? 'amber' : SIZE_TEXT[size][0], size_text: tryTest ? 'Over 50 employees, up to 200: an own-staff training test candidate (see the checklist).' : SIZE_TEXT[size][1],
+    size_tone: tryTest ? 'amber' : SIZE_TEXT[size][0], size_text: tryTest ? 'Over 50 employees, up to 200: a company employee training candidate (see the checklist).' : SIZE_TEXT[size][1],
     auth_tone: AUTH_TEXT[authority][0], auth_text: AUTH_TEXT[authority][1],
   };
 }

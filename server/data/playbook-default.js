@@ -34,8 +34,8 @@ export const DEFAULT_PLAYBOOK = `# skillBNK outreach rules
 - **14 days**: last follow-up, then stop. **Two unanswered messages is the limit**; pause 3 to 4 weeks.
 - A step more than 14 days late is stale. Close it or move it to nurture; do not chase it.
 
-## Test: companies that train their own staff (proposed 11 Nov 2026, awaiting Shiblu's yes; running as a 4-week test)
-A company with 51 to 200 employees that trains its **own** staff (does not sell training), with no LMS found, a recurring training need and a path to the owner or an executive, may be tried instead of skipped. Over 200 stays SKIP when cold. Training providers over 50 stay SKIP as customers (they already have an LMS). Companies that sell an LMS or e-learning software are our competitors: SKIP. Max 3 to 5 such leads per person per week. Write "QUALIFY - TRY (own-staff test)" in Assessment. Review every Saturday: replies, meetings, time spent.
+## Company employee training (proposed 11 Nov 2026, awaiting Shiblu's yes)
+A company with 51 to 200 employees that trains its **own** staff (does not sell training), with no LMS found, a recurring training need and a path to the owner or an executive, may be tried instead of skipped. Over 200 stays SKIP when cold. Training providers over 50 stay SKIP as customers (they already have an LMS). Companies that sell an LMS or e-learning software are our competitors: SKIP. Max 3 to 5 such leads per person per week. Write "QUALIFY - TRY (company training)" in Assessment. Review every Saturday: replies, meetings and time spent, and stop if it does not work.
 
 ## Meetings
 - Never in a first message. Only after the lead replied with something specific about their training, or invited a call.
