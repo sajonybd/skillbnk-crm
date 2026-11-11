@@ -73,7 +73,7 @@ export async function openLead(id, ctx, onChange = () => {}) {
 
   async function load() {
     const { lead, fit, activities, meetings, links } = await api('GET', `/api/leads/${id}`);
-    draw(lead, activities, meetings, links);
+    draw(lead, activities, meetings, links, fit);
   }
 
   async function save(patch, okMsg = 'Saved') {
@@ -192,7 +192,7 @@ export async function openLead(id, ctx, onChange = () => {}) {
     return h('section', null, h('h3', null, 'Links'), list, h('div', { class: 'resform' }, url, kind, label, add));
   }
 
-  function draw(l, acts, meetings, links) {
+  function draw(l, acts, meetings, links, fit) {
     if (l.deleted_at) return drawTrashed(l, acts, meetings, links);
     const { stages, qualities, manualTypes } = ctx.config;
     const activeUsers = ctx.users.filter((u) => u.active);
