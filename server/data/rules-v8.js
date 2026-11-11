@@ -82,7 +82,7 @@ C8 An LMS or course platform is found and the organization is not selling an LMS
 C9 The organization sells an LMS -> competitor; market intelligence only.
 C10 No LMS found -> write exactly "no LMS found on pages checked"; ask in conversation.
 C11 Fewer than about 10 employees -> nurture unless a clear need is shown.
-C12 MORE THAN 50 EMPLOYEES -> SKIP as direct customer: no note, no message. If size unknown, find the headcount first.
+C12 MORE THAN 50 EMPLOYEES -> SKIP as direct customer for COLD outreach: no note, no message. If size unknown, find the headcount first. EXCEPTION (Part 2: warm conversations, booked meetings and commitments continue unchanged): a lead that has replied, has a booked or held meeting, a proposal, an invoice or is already a customer is an ACTIVE RELATIONSHIP. Do not SKIP it for size; continue it, flag the size for the owner, and never close it silently.
 C13 Early-stage startup or young donor-funded organization -> keep a good relationship; no sales effort.
 C14 Consultant, coach, accelerator or firm serving training companies -> partner path; never customer messaging.
 C15 The person is pitching us -> if their clients could become customers: brief, curious, no-pitch reply; otherwise one short polite reply if they wrote first, no message if we found them; then stop.
@@ -102,7 +102,7 @@ C28 The lead is actively in conversation -> outreach status R; stage Replied; le
 C29 Sunday -> content, planning and follow-ups; new connection requests are not the focus.
 C31 The lead already has any system or LMS and does not sell one (C8) -> Question 1 is one AI question about content creation, assessments or repetitive training work; no meeting request, no offer, no replacement pitch. Question 2 may ask whether each partner or client gets its own branded learning space. Verdict QUALIFY while evidence of paid training exists.
 C32 After a question is sent, log its type (AI, process, other) and whether it got a reply.
-C33 More than 50 employees (or clearly large) -> SKIP (C12). In any company a manager, coordinator or specialist whose authority to decide or buy is not verified cannot make a PURSUE lead. Check seniority before writing any question sheet.
+C33 More than 50 employees (or clearly large) and no active relationship -> SKIP (C12). In any company a manager, coordinator or specialist whose authority to decide or buy is not verified cannot make a PURSUE lead. Check seniority before writing any question sheet.
 
 MESSAGE RULES
 - Connection note (2nd or 3rd degree): 300 characters or fewer; greeting; one benefit line (we help training providers save time and money so more goes to clients or teaching); one fact showing you reviewed their work; one curious question. No offer, partner line, meeting request or feature list.
@@ -122,6 +122,6 @@ Outreach status: U (unseen), SNR (seen, no reply), NI (not interested), R (repli
 Mapping: SKIP = Quality "Not a Fit" plus the reason in Denial reason; NURTURE = outreach status NUTR; PURSUE and QUALIFY = work the lead, with the verdict as the first word of the Assessment text. Record in Assessment in this order: "Pays: ... | Learner price: ... | Headcount: ... | Platform: ... (link) | Buyer: ...".
 
 REFERENCE LESSONS
-- Good: Jay Shop (Michigan nonprofit with its own manufacturing income, a workforce it must train, no visible LMS, a named contact with a stated need, a small first use).
+- Good: Jay Shop (Michigan nonprofit with its own manufacturing income, 106+ employees, a workforce it must train, no visible LMS, a named contact with a stated need, a small first use; our first client). It is an ACTIVE customer, so the size rule did not apply.
 - Bad: SupportEd (13 employees but a training provider selling to school districts; a booking route meant for districts; declined twice = final).
 - Acorn Industries: more than 50 employees, the contact was a manager who cannot decide = SKIP, even though the GMP training need was real. Check that the LinkedIn profile matches the name.`;

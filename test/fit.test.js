@@ -46,3 +46,10 @@ test('place and training signals', () => {
   assert.equal(b.michigan, false); assert.equal(b.training, false); assert.equal(b.loc_tone, 'amber');
   assert.equal(signalsOf({}).loc_tone, 'grey');
 });
+
+test('big company already in a meeting is not suggested for skip', () => {
+  assert.equal(fitOf({ employees: '211', title: 'Director', stage: 'Contacted', outreach_status: 'U' }).suggest, 'skip');
+  const f = fitOf({ employees: '211', title: 'Director', stage: 'Meeting Booked', outreach_status: 'M' });
+  assert.equal(f.suggest, 'qualify');
+  assert.equal(fitOf({ employees: '211', title: 'Director', stage: 'Contacted', outreach_status: 'R' }).suggest, 'qualify');
+});

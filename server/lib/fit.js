@@ -37,7 +37,7 @@ export function authorityOf(title) {
 }
 
 const SIZE_TEXT = {
-  big: ['red', 'Over 50 employees: a big company. Suggest SKIP as a direct customer.'],
+  big: ['red', 'Over 50 employees: a big company. Suggest SKIP as a direct customer (cold outreach only).'],
   sweet: ['green', '10–50 employees: the sweet spot.'],
   small: ['amber', 'Under 10 employees: suggest NURTURE unless a clear need is shown.'],
   unknown: ['grey', 'Headcount not clear: find it first (suggest QUALIFY, no invite yet).'],
@@ -72,7 +72,10 @@ export function fitOf(lead) {
   const size = sizeOf(lead.employees).band;
   const authority = authorityOf(lead.title);
   let suggest, why;
-  if (size === 'big') { suggest = 'skip'; why = authority === 'low' ? 'Big company and a contact who cannot decide.' : 'Big company (over 50 employees).'; }
+  // The big-company rule is for COLD outreach. A lead already in conversation, with a meeting, or past it, is an active relationship.
+  const active = ['R', 'M'].includes(lead.outreach_status) || ['Replied', 'Meeting Booked', 'Meeting Done'].includes(lead.stage);
+  if (size === 'big' && active) { suggest = 'qualify'; why = 'Over 50 employees, but already in an active conversation or meeting. The size rule is for cold outreach: do not close it. Continue and let the owner decide.'; }
+  else if (size === 'big') { suggest = 'skip'; why = authority === 'low' ? 'Big company and a contact who cannot decide.' : 'Big company (over 50 employees).'; }
   else if (size === 'small') { suggest = 'nurture'; why = 'Under 10 employees.'; }
   else if (size === 'unknown') { suggest = 'qualify'; why = 'Headcount is missing or unclear.'; }
   else if (authority === 'low') { suggest = 'qualify'; why = 'Right size, but this contact probably cannot decide. Find the owner or CEO.'; }
