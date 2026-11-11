@@ -67,6 +67,12 @@ export function signalsOf(lead) {
   return { loc_tone: loc[0], loc_text: loc[1], michigan: mi, train_tone: tr[0], train_text: tr[1], training: tr[0] === 'green' };
 }
 
+// Nonprofit / NGO: not excluded. What matters is where the money comes from (Jay Shop: own earned income; Social Purpose Corrections: donations).
+const NONPROFIT = /\b(non-?profits?|ngo|foundation|charit(y|ies|able)|associations?|philanthrop\w*|volunteer\w*|community (services|development|organization))\b/i;
+export function nonprofitOf(lead) {
+  return NONPROFIT.test([lead.industry, lead.company].join(' '));
+}
+
 // One suggestion from the two signals. A person confirms it.
 export function fitOf(lead) {
   const size = sizeOf(lead.employees).band;
@@ -82,7 +88,8 @@ export function fitOf(lead) {
   else if (authority === 'dm') { suggest = 'good'; why = 'Right size and a decision maker by title.'; }
   else { suggest = 'qualify'; why = 'Right size; check that this contact has authority.'; }
   return {
-    ...signalsOf(lead),
+    ...signalsOf(lead), nonprofit: nonprofitOf(lead),
+    np_text: nonprofitOf(lead) ? 'Looks like a nonprofit or NGO: not excluded. Check where the money comes from (own earned income and contracts = good; mostly grants, donations or government = relationship only), whether they train their own staff, and who pays for the training.' : '',
     size, authority, suggest, why,
     size_tone: SIZE_TEXT[size][0], size_text: SIZE_TEXT[size][1],
     auth_tone: AUTH_TEXT[authority][0], auth_text: AUTH_TEXT[authority][1],

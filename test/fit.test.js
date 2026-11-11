@@ -53,3 +53,9 @@ test('big company already in a meeting is not suggested for skip', () => {
   assert.equal(f.suggest, 'qualify');
   assert.equal(fitOf({ employees: '211', title: 'Director', stage: 'Contacted', outreach_status: 'R' }).suggest, 'qualify');
 });
+
+import { nonprofitOf } from '../server/lib/fit.js';
+test('nonprofit signal', () => {
+  assert.equal(nonprofitOf({ industry: 'nonprofit organization management', company: 'Jay Shop, Inc.' }), true);
+  assert.equal(nonprofitOf({ industry: 'logistics', company: 'Northfield Logistics' }), false);
+});
