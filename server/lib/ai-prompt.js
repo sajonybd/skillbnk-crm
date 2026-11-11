@@ -4,7 +4,7 @@ const v = (x) => (x === undefined || x === null || String(x).trim() === '' ? 'no
 const ACT = { linkedin_view: 'Viewed profile', linkedin_follow: 'Followed', linkedin_like: 'Liked a post', linkedin_comment: 'Commented', linkedin_connect: 'Sent connection request', linkedin_connected: 'Connection accepted', linkedin_inmail: 'InMail', linkedin_dm: 'LinkedIn message', email: 'Email', call: 'Call', meeting: 'Meeting', note: 'Note' };
 
 // The admin's saved Playbook text wins when it looks like the full rulebook; otherwise the built-in v8 copy is used.
-export function buildAiPrompt({ lead: l, fit, activities, meetings, links, playbook, user }) {
+export function buildAiPrompt({ lead: l, fit, guide, activities, meetings, links, playbook, user }) {
   const custom = playbook && playbook.length > 6000 && /H1\b/.test(playbook);
   const rules = custom ? playbook : RULES_V8;
   const name = [l.first_name, l.last_name].filter(Boolean).join(' ') || '(no name)';
@@ -19,6 +19,9 @@ export function buildAiPrompt({ lead: l, fit, activities, meetings, links, playb
     `Invite sent: ${v(l.invite_sent_date)} | Accepted: ${v(l.accepted_date)} | First DM: ${v(l.first_dm_date)}`, `Notes: ${v(l.notes)}`);
   if (links.length) L.push('', 'Saved links:', ...links.map((k) => `- ${k.label || k.kind}: ${k.url}`));
   L.push('', 'CRM fit hint (a suggestion from headcount and job title only, not a verdict):', fit ? `- ${fit.size_text}\n- ${fit.auth_text}\n- Suggestion: ${fit.suggest.toUpperCase()} (${fit.why})` : '- none');
+  if (guide) L.push(...['', 'NEXT STEP the CRM suggests (from the lead\'s history and the follow-up schedule; a person decides):',
+    `- Do: ${guide.action}${guide.channel ? ' [' + guide.channel + ']' : ''}`, `- Why: ${guide.why}`, guide.due ? `- Due: ${guide.due}${guide.late_days ? ' (' + guide.late_days + ' days late)' : ''}` : null,
+    ...(guide.how || []).map((x) => `- How: ${x}`), ...(guide.dont || []).map((x) => `- Avoid: ${x}`)].filter((x) => x !== null));
   L.push('', `Meetings (${meetings.length}):`, ...(meetings.length ? meetings.map((m) => `- ${m.scheduled_date} ${m.scheduled_time || ''} | ${v(m.status)} | booked by ${v(m.booked_by_name)} | ${m.notes || ''}`) : ['- none']));
   L.push('', `Activity history in the CRM (newest first, ${activities.length} shown). These are logged actions; the CRM does not hold the LinkedIn inbox, so the real conversation must be read by a human:`,
     ...(activities.length ? activities.map((a) => `- ${String(a.created_at).slice(0, 16).replace('T', ' ')} UTC | ${a.user_name} | ${ACT[a.type] || a.type}${a.note ? ': ' + String(a.note).replace(/\s+/g, ' ').slice(0, 400) : ''}`) : ['- no activity logged']));
@@ -26,6 +29,7 @@ export function buildAiPrompt({ lead: l, fit, activities, meetings, links, playb
   const prompt = `You are a careful research assistant for skillBNK's LinkedIn outreach. Follow the rulebook below exactly. You research and draft only; a human sends and logs everything (H1).
 
 === TASK ===
+The lead data includes a NEXT STEP suggested by the CRM. Say whether you agree with it. If you do not, say what the right next step is and why, using the rules.
 Research the lead below and return one RESULT BLOCK, in this order:
 1. Rule check: "All hard rules met", or the H-number that could not be met and why.
 2. Verdict: PURSUE, QUALIFY, NURTURE or SKIP, with a one-line reason. If SKIP, STOP after one line (H2): name, company, SKIP, reason.
@@ -42,7 +46,7 @@ Research the lead below and return one RESULT BLOCK, in this order:
 13. Question sheet: what I think about this lead (facts and inferences separate), Question 1 with its reason, Question 2.
 14. Opportunity ratings (Strong, Possible, Unproven, No evidence, Not justified, one evidence note each): Direct skillBNK Customer; Strategic Partnership; AI Video / Content Tool; AI Agent / Automation Tool; Custom Platform Development; Discovery Meeting; Relationship Building.
 15. A suggested CRM update (existing dropdown values only) and the Assessment line in this format: "VERDICT - ... | Pays: ... | Learner price: ... | Headcount: ... | Platform: ... (link) | Buyer: ...".
-Then, only if the verdict is not SKIP, draft the next message for a human to send: a connection note (300 characters or fewer) if not yet connected, otherwise a first message or follow-up that follows the rules (no signature, no emoji, no offer, no meeting request in a first message).
+Add one line: "Next step for the team member" in plain words (comment, like, follow, connection request, message, follow-up, InMail or email, or wait), with the reason. Then, only if the verdict is not SKIP, draft the next message for a human to send: a connection note (300 characters or fewer) if not yet connected, otherwise a first message or follow-up that follows the rules (no signature, no emoji, no offer, no meeting request in a first message).
 
 How to work:
 - Use web browsing if you can: read the company website beyond the homepage (About, programs, pricing, contact, team, careers, footer), read the link target of every Enroll, Buy, Login and Book button, and check the LinkedIn profile and company page.

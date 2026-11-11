@@ -12,6 +12,7 @@ import { todayLocal, addDays } from '../lib/kpi.js';
 import { nextStep } from '../lib/cadence.js';
 import { getRules } from '../lib/rules.js';
 import { buildAiPrompt } from '../lib/ai-prompt.js';
+import { guideOf, countsFor } from '../lib/guide.js';
 
 const TEXT_FIELDS = [
   'first_name', 'last_name', 'title', 'company', 'email', 'email_status', 'phone',
@@ -423,7 +424,8 @@ export function leadsRoutes(db) {
        WHERE m.lead_id = ? ORDER BY m.scheduled_date DESC, m.scheduled_time DESC, m.id DESC`
     ).all(lead.id);
     const links = db.prepare('SELECT id, kind, label, url, created_at FROM lead_links WHERE lead_id = ? ORDER BY id').all(lead.id);
-    res.json({ lead, fit: fitOf(lead), activities, meetings, links });
+    const fit = fitOf(lead);
+    res.json({ lead, fit, guide: guideOf(lead, { fit, counts: countsFor(db, lead.id), today: todayLocal(), rules: getRules(db) }), activities, meetings, links });
   });
 
   // Ready-to-paste research brief for an AI chat: rules + everything the CRM knows about this lead.
@@ -435,7 +437,9 @@ export function leadsRoutes(db) {
     const meetings = db.prepare('SELECT m.*, b.name AS booked_by_name FROM meetings m LEFT JOIN users b ON b.id = m.booked_by WHERE m.lead_id = ? ORDER BY m.scheduled_date DESC').all(id);
     const links = db.prepare('SELECT kind, label, url FROM lead_links WHERE lead_id = ? ORDER BY id').all(id);
     const saved = db.prepare("SELECT value FROM settings WHERE key = 'playbook_md'").get()?.value;
-    res.json(buildAiPrompt({ lead, fit: fitOf(lead), activities, meetings, links, playbook: saved, user: req.user }));
+    const fit = fitOf(lead);
+    const guide = guideOf(lead, { fit, counts: countsFor(db, id), today: todayLocal(), rules: getRules(db) });
+    res.json(buildAiPrompt({ lead, fit, guide, activities, meetings, links, playbook: saved, user: req.user }));
   });
 
   const liveLead = (id) => {

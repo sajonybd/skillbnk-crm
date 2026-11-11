@@ -711,3 +711,12 @@ td, th { padding-left: 9px; padding-right: 9px; }
 .fitbox h3 { margin: 0 0 6px; }
 .fit-line { display: flex; gap: 8px; align-items: center; margin: 3px 0; font-size: 13px; }
 .fit-say { margin: 6px 0 2px; font-size: 13.5px; }
+
+/* Next-step guide in the lead drawer */
+.nextbox { border: 1px solid var(--line); border-left: 4px solid #2563eb; border-radius: 10px; padding: 12px 14px; background: #f5f9ff; }
+.nextbox.late { border-left-color: #d97706; background: #fffaf0; }
+.nextbox h3 { margin: 0 0 6px; }
+.next-act { font-weight: 650; font-size: 15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.next-ch { font-size: 11px; font-weight: 600; background: #e0ecff; color: #1d4ed8; border-radius: 999px; padding: 2px 8px; }
+.next-how { margin: 8px 0 6px 18px; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.next-dont { font-size: 12.5px; color: #b45309; margin: 4px 0 6px; }

@@ -73,8 +73,8 @@ export async function openLead(id, ctx, onChange = () => {}) {
   const closeAndNotify = close;
 
   async function load() {
-    const { lead, fit, activities, meetings, links } = await api('GET', `/api/leads/${id}`);
-    draw(lead, activities, meetings, links, fit);
+    const { lead, fit, guide, activities, meetings, links } = await api('GET', `/api/leads/${id}`);
+    draw(lead, activities, meetings, links, fit, guide);
   }
 
   async function save(patch, okMsg = 'Saved') {
@@ -193,7 +193,7 @@ export async function openLead(id, ctx, onChange = () => {}) {
     return h('section', null, h('h3', null, 'Links'), list, h('div', { class: 'resform' }, url, kind, label, add));
   }
 
-  function draw(l, acts, meetings, links, fit) {
+  function draw(l, acts, meetings, links, fit, guide) {
     if (l.deleted_at) return drawTrashed(l, acts, meetings, links);
     const { stages, qualities, manualTypes } = ctx.config;
     const activeUsers = ctx.users.filter((u) => u.active);
@@ -299,6 +299,13 @@ export async function openLead(id, ctx, onChange = () => {}) {
         h('div', { class: 'col', style: 'gap:6px;align-items:flex-end' },
           h('button', { class: 'btn small', onclick: closeAndNotify }, icon('x', 14), 'Close'),
           aiBtn(id))),
+      guide && guide.kind !== 'none' ? h('section', { class: 'nextbox' + (guide.late_days ? ' late' : '') },
+        h('h3', null, 'Next step'),
+        h('div', { class: 'next-act' }, guide.action, guide.channel ? h('span', { class: 'next-ch' }, guide.channel) : null),
+        h('div', { class: 'sub' }, guide.why + (guide.due ? ` · due ${guide.due}${guide.late_days ? ` (${guide.late_days} days late)` : ''}` : '')),
+        guide.how?.length ? h('ol', { class: 'next-how' }, guide.how.map((x) => h('li', null, x))) : null,
+        guide.dont?.length ? h('div', { class: 'next-dont' }, guide.dont.map((x) => h('div', null, '✗ ' + x))) : null,
+        h('div', { class: 'sub' }, 'A suggestion from the follow-up schedule and this lead\'s history. Log what you did below.')) : null,
       fit ? h('section', { class: 'fitbox ' + (fit.suggest === 'skip' ? 'red' : fit.suggest === 'good' ? 'green' : 'amber') },
         h('h3', null, 'Fit check (a suggestion, please verify)'),
         h('div', { class: 'fit-line' }, h('span', { class: 'fitchip ' + fit.size_tone }, 'Size'), fit.size_text),
