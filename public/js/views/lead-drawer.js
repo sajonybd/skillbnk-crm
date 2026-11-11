@@ -37,13 +37,14 @@ function shell(onClose = () => {}) {
   return { drawer, close };
 }
 
-function timelineEl(ctx, acts) {
+function timelineEl(ctx, acts, onDelete) {
   if (acts.length === 0) return h('div', { class: 'muted' }, 'No activity yet.');
   return h('ul', { class: 'timeline' }, acts.map((a) => h('li', null,
     h('div', { class: 'tl-ico', title: ctx.config.typeLabels[a.type] || a.type }, icon(TYPE_ICON[a.type] || 'clock', 14)),
     h('div', { class: 'tl-body' },
       h('div', null, h('b', null, ctx.config.typeLabels[a.type] || a.type), a.note ? ' · ' + a.note : ''),
-      h('div', { class: 'tl-meta', title: a.created_at }, `${a.user_name} · ${fmtDateTime(a.created_at)} (${timeAgo(a.created_at)})`)))));
+      h('div', { class: 'tl-meta', title: a.created_at }, `${a.user_name} · ${fmtDateTime(a.created_at)} (${timeAgo(a.created_at)})`)),
+    onDelete && a.id ? h('button', { class: 'ib', title: 'Remove this log (admin)', onclick: () => onDelete(a) }, icon('trash', 14)) : null)));
 }
 
 // track = { onLogged } turns on automatic profile-visit logging for the LinkedIn buttons.
@@ -273,14 +274,18 @@ export async function openLead(id, ctx, onChange = () => {}) {
     const logBtn = h('button', { class: 'btn primary', onclick: async () => {
       try {
         logBtn.disabled = true;
-        await api('POST', `/api/leads/${id}/activities`, { type, note: note.value });
+        const r = await api('POST', `/api/leads/${id}/activities`, { type, note: note.value });
+        if (r?.duplicate) { toast('Already logged (same action today or just now), not added again'); logBtn.disabled = false; return; }
         changed = true;
         toast('Logged');
         await load();
       } catch (e) { toast(e.message, true); logBtn.disabled = false; }
     } }, 'Log activity');
 
-    const timeline = timelineEl(ctx, acts);
+    const timeline = timelineEl(ctx, acts, ctx.user.role === 'admin' ? async (a) => {
+      if (!confirm(`Remove this log?\n\n${ctx.config.typeLabels[a.type] || a.type} by ${a.user_name}, ${fmtDateTime(a.created_at)}\n\nIt will stop counting in the reports.`)) return;
+      try { await api('DELETE', `/api/leads/${id}/activities/${a.id}`); changed = true; toast('Log removed'); await load(); } catch (e) { toast(e.message, true); }
+    } : null);
     const linkRow = linksEl(l, links, { onLogged: () => { changed = true; load(); } });
 
     drawer.replaceChildren(

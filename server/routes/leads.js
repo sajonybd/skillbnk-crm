@@ -495,7 +495,17 @@ export function leadsRoutes(db) {
   });
 
   // Logs one outreach action and fills the funnel dates / next follow-up the first time it happens.
+  // Once per person, lead and day for these; and any identical entry within 20 seconds is a double click.
+  const ONCE_A_DAY = new Set(['linkedin_view', 'linkedin_follow', 'linkedin_connect', 'linkedin_connected', COMPANY_VIEW_TYPE]);
+  function isDuplicate(lead, type, text, user) {
+    if (type === 'note' && !text) return false;
+    const day = rangeBounds('today');
+    if (ONCE_A_DAY.has(type) && db.prepare('SELECT 1 FROM activities WHERE lead_id = ? AND user_id = ? AND type = ? AND created_at >= ? AND created_at < ?').get(lead.id, user.id, type, day.start, day.end)) return true;
+    const since = new Date(Date.now() - 20000).toISOString();
+    return !!db.prepare('SELECT 1 FROM activities WHERE lead_id = ? AND user_id = ? AND type = ? AND note = ? AND created_at >= ?').get(lead.id, user.id, type, text, since);
+  }
   function recordActivity(lead, type, text, user) {
+      if (isDuplicate(lead, type, text, user)) return false;
       logActivity(db, { lead_id: lead.id, user_id: user.id, type, note: text });
       // Fill the outreach funnel dates the first time each step is logged.
       const today = todayLocal();
@@ -514,6 +524,7 @@ export function leadsRoutes(db) {
       if (lead.stage === 'New' && FIRST_TOUCH_TYPES.includes(type)) {
         applyChanges(db.prepare('SELECT * FROM leads WHERE id = ?').get(lead.id), { stage: 'Contacted' }, user);
       }
+      return true;
   }
 
   // One-click result of a planned step. The Plan page sends { result, kind } and this works out what to log and when
@@ -579,8 +590,20 @@ export function leadsRoutes(db) {
     if (!(type in MANUAL_TYPES)) throw new HttpError(400, 'Unknown activity type');
     const text = String(note || '').trim();
     if (type === 'note' && !text) throw new HttpError(400, 'Write a note first');
-    tx(db, () => recordActivity(lead, type, text, req.user));
+    const added = tx(db, () => recordActivity(lead, type, text, req.user));
+    if (!added) return res.json({ ok: true, duplicate: true });
     res.status(201).json({ ok: true });
+  });
+
+  // Admin only: remove one wrongly logged activity. The lead's "last activity" is recalculated.
+  r.delete('/:id/activities/:actId', requireAdmin, (req, res) => {
+    const lead = db.prepare('SELECT id FROM leads WHERE id = ?').get(Number(req.params.id));
+    if (!lead) throw new HttpError(404, 'Lead not found');
+    const del = db.prepare('DELETE FROM activities WHERE id = ? AND lead_id = ?').run(Number(req.params.actId), lead.id);
+    if (!del.changes) throw new HttpError(404, 'Activity not found');
+    const last = db.prepare("SELECT MAX(created_at) AS t FROM activities WHERE lead_id = ? AND type NOT IN ('edit','trashed','restored')").get(lead.id).t || '';
+    db.prepare('UPDATE leads SET last_activity_at = ? WHERE id = ?').run(last, lead.id);
+    res.json({ ok: true });
   });
 
   return r;
