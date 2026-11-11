@@ -8,7 +8,7 @@ const verdictOf = (l) => (String(l.assessment || '').trim().match(/^(PURSUE|QUAL
 const NO_PITCH = 'Do not pitch, do not offer a meeting, no signature, no emoji.';
 
 // counts = { linkedin_view: 2, linkedin_like: 1, ... } for this lead (all time, all people)
-export function guideOf(l, { fit, counts = {}, today, rules }) {
+export function guideOf(l, { fit, counts = {}, today, rules, meetings = [] }) {
   const n = (t) => counts[t] || 0;
   const verdict = verdictOf(l);
   const real = ['PURSUE', 'QUALIFY'].includes(verdict);
@@ -24,8 +24,28 @@ export function guideOf(l, { fit, counts = {}, today, rules }) {
       dont: ['Do not send a note or message while this is open.'] });
   }
 
-  // 2. A step that has come due (reply, first message, follow-up, check…).
   const s = nextStep(l, today, rules);
+
+  // 1b. A meeting exists. An unanswered reply still comes first; otherwise the meeting is the work, not an old planned follow-up.
+  if (s?.kind !== 'reply') {
+    const booked = meetings.filter((m) => m.status === 'booked').sort((a, b) => String(a.scheduled_date).localeCompare(String(b.scheduled_date)));
+    const past = booked.find((m) => m.scheduled_date < today);
+    const upcoming = booked.find((m) => m.scheduled_date >= today);
+    const when = (m) => `${m.scheduled_date}${m.scheduled_time ? ' ' + m.scheduled_time : ''}`;
+    if (past) {
+      const late = Math.round((new Date(today) - new Date(past.scheduled_date)) / 86400000);
+      return g({ kind: 'meeting_past', action: 'The meeting date has passed: record what happened', channel: 'CRM', due: past.scheduled_date, late_days: late,
+        why: `Meeting ${when(past)}${past.notes ? ' (' + past.notes + ')' : ''} is still marked "booked".`,
+        how: ['Ask the person who booked it, or check the calendar and the lead\'s email and LinkedIn thread: did it happen?', 'Open the Meetings page and mark it Completed, Cancelled or Rescheduled.', 'If it happened, write what the lead said they need, what was agreed and the next step in Notes (Meeting outcome record: size, new or established, platform found, who attended, result, reason).', 'Do not send a generic follow-up or propose a new meeting until you know what happened.'],
+        dont: ['Do not restart the relationship with an introduction.'] });
+    }
+    if (upcoming) return g({ kind: 'meeting', action: 'Prepare for the meeting', channel: '', due: upcoming.scheduled_date,
+      why: `Meeting booked for ${when(upcoming)}${upcoming.notes ? ' (' + upcoming.notes + ')' : ''}.`,
+      how: ['Read the whole history and the lead\'s notes.', 'Write three questions about how they train and who decides.', 'Check headcount, platform and who attends. A human confirms the calendar and the time zone.'],
+      dont: ['No pitch before you understand how they work today.'] });
+  }
+
+  // 2. A step that has come due (reply, first message, follow-up, check…).
   if (s) {
     const late = s.due < today ? Math.round((new Date(today) - new Date(s.due)) / 86400000) : 0;
     const base = { due: s.due, late_days: late, why: s.reason, planned_text: s.detail };

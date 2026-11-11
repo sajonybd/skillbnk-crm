@@ -430,7 +430,7 @@ export function leadsRoutes(db) {
     ).all(lead.id);
     const links = db.prepare('SELECT id, kind, label, url, created_at FROM lead_links WHERE lead_id = ? ORDER BY id').all(lead.id);
     const fit = fitOf(lead);
-    res.json({ lead, fit, guide: guideOf(lead, { fit, counts: countsFor(db, lead.id), today: todayLocal(), rules: getRules(db) }), activities, meetings, links });
+    res.json({ lead, fit, guide: guideOf(lead, { fit, counts: countsFor(db, lead.id), today: todayLocal(), rules: getRules(db), meetings }), activities, meetings, links });
   });
 
   // One lead for that chat: everything the CRM knows, the suggested next step and a place for your own findings.
@@ -442,7 +442,7 @@ export function leadsRoutes(db) {
     const meetings = db.prepare('SELECT m.*, b.name AS booked_by_name FROM meetings m LEFT JOIN users b ON b.id = m.booked_by WHERE m.lead_id = ? ORDER BY m.scheduled_date DESC').all(id);
     const links = db.prepare('SELECT kind, label, url FROM lead_links WHERE lead_id = ? ORDER BY id').all(id);
     const fit = fitOf(lead);
-    const guide = guideOf(lead, { fit, counts: countsFor(db, id), today: todayLocal(), rules: getRules(db) });
+    const guide = guideOf(lead, { fit, counts: countsFor(db, id), today: todayLocal(), rules: getRules(db), meetings });
     res.json(buildLeadPrompt({ lead, fit, guide, activities, meetings, links }));
   });
 

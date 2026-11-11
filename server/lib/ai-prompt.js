@@ -101,7 +101,7 @@ export function buildLeadPrompt({ lead: l, fit, guide, activities, meetings, lin
   }
   L.push('', `Meetings (${meetings.length}):`, ...(meetings.length ? meetings.map((m) => `- ${m.scheduled_date} ${m.scheduled_time || ''} | ${v(m.status)} | booked by ${v(m.booked_by_name)} | ${m.notes || ''}`) : ['- none']));
   L.push('', `Activity history in the CRM (newest first, ${activities.length} shown; the LinkedIn inbox itself is not in the CRM):`,
-    ...(activities.length ? activities.map((a) => `- ${String(a.created_at).slice(0, 16).replace('T', ' ')} UTC | ${a.user_name} | ${ACT[a.type] || a.type}${a.note ? ': ' + String(a.note).replace(/\s+/g, ' ').slice(0, 400) : ''}`) : ['- no activity logged']));
+    ...(activities.length ? activities.filter((a) => a.type !== 'edit').map((a) => `- ${String(a.created_at).slice(0, 16).replace('T', ' ')} UTC | ${a.user_name} | ${ACT[a.type] || a.type}${a.note ? ': ' + String(a.note).replace(/\s+/g, ' ').slice(0, 400) : ''}`) : ['- no activity logged']));
 
   const prompt = `=== NEW LEAD: ${name}${l.company ? ', ' + l.company : ''} ===
 Apply the setup and the rulebook from the start of this chat to this lead only. Answer in the A to F format. Treat everything below as this lead's data; forget the previous lead.
