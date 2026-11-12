@@ -91,7 +91,7 @@ export function fitOf(lead) {
   else if (signalsOf(lead).india && !active) { suggest = 'skip'; why = 'Located in India: strict screening. Skip unless there is clear evidence of active, structured training and decision-making authority.'; }
   else if (size === 'big' && TRY_TEST.enabled && sizeOf(lead.employees).hi <= TRY_TEST.max_employees && !signalsOf(lead).training) {
     suggest = 'try';
-    why = `Over 50 but up to ${TRY_TEST.max_employees} employees. Company employee training (awaiting Shiblu's yes): try it only if it trains its OWN staff, no LMS is found, there is a recurring training need and a path to the owner or an executive. Max ${TRY_TEST.per_person_per_week} per person per week.`;
+    why = `Over 50 but up to ${TRY_TEST.max_employees} employees. Company employee training (approved 12 Nov 2026 as told by Shiblu): try it only if it trains its OWN staff, no LMS is found, there is a recurring training need and a path to the owner or an executive. Max ${TRY_TEST.per_person_per_week} per person per week.`;
   }
   else if (size === 'big') { suggest = 'skip'; why = authority === 'low' ? 'Big company and a contact who cannot decide.' : 'Big company (over 50 employees).'; }
   else if (size === 'small') { suggest = 'nurture'; why = 'Under 10 employees.'; }
