@@ -408,7 +408,41 @@ export function leadsRoutes(db) {
     const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : null);
     const rates = { acceptance: pct(f.accepted, f.invited), reply: pct(f.replied, f.firstDm), meeting: pct(f.meetings, f.replied) };
     const by = (col) => Object.fromEntries(db.prepare(`SELECT ${col} AS k, COUNT(*) AS n FROM leads WHERE ${w} GROUP BY ${col}`).all(...params).map((x) => [x.k || '', x.n]));
-    res.json({ counts: f, rates, byStatus: by('outreach_status'), byCategory: by('lead_category'), byPath: by('quality'), byTier: by('tier') });
+    // Selected period (Today / This week / Custom ...): what the chosen person did, counted from the activity log.
+    // ?range=today|yesterday|week|last_week|month|last_month|custom|all, ?from= ?to= (custom), ?user=<id> (who did it).
+    const b = rangeBounds(req.query.range || 'all', req.query.from, req.query.to);
+    const aw = ["l.deleted_at = ''"];
+    const ap = [];
+    if (b) { aw.push('a.created_at >= ? AND a.created_at < ?'); ap.push(b.start, b.end); }
+    const who = req.query.user || req.query.owner;
+    if (who) { aw.push('a.user_id = ?'); ap.push(Number(who)); }
+    const acts = (types, distinct) => db.prepare(
+      `SELECT ${distinct ? 'COUNT(DISTINCT a.lead_id)' : 'COUNT(*)'} AS n FROM activities a JOIN leads l ON l.id = a.lead_id
+       WHERE ${aw.join(' AND ')} AND a.type IN (${types.map(() => '?').join(',')})`).get(...ap, ...types).n;
+    const replies = db.prepare(
+      `SELECT COUNT(DISTINCT a.lead_id) AS n FROM activities a JOIN leads l ON l.id = a.lead_id
+       WHERE ${aw.join(' AND ')} AND a.type = 'response_change' AND a.meta LIKE '%"to":"R"%'`).get(...ap).n;
+    const period = {
+      invites: acts(['linkedin_connect'], true),
+      accepted: acts(['linkedin_connected'], true),
+      messages: acts(['linkedin_dm'], false),
+      messagedLeads: acts(['linkedin_dm'], true),
+      inmails: acts(['linkedin_inmail'], false),
+      emails: acts(['email'], false),
+      emailedLeads: acts(['email'], true),
+      replies,
+      meetingsBooked: acts(['meeting_booked'], false),
+      comments: acts(['linkedin_comment'], false),
+      likes: acts(['linkedin_like'], false),
+      follows: acts(['linkedin_follow'], false),
+    };
+    // Right now (not a period): invites still waiting, and first messages with no reply yet, by owner.
+    const today = todayLocal();
+    const pend = db.prepare(`SELECT invite_sent_date AS d FROM leads WHERE ${w} AND invite_sent_date != '' AND accepted_date = '' AND outreach_status NOT IN ('NI','R','M','NUTR') AND stage NOT IN ('Meeting Booked','Meeting Done','Closed')`).all(...params);
+    const age = (d) => Math.round((Date.parse(today) - Date.parse(d)) / 86400000);
+    const pending = { total: pend.length, upTo7: pend.filter((x) => age(x.d) <= 7).length, d8to14: pend.filter((x) => age(x.d) > 7 && age(x.d) <= 14).length, over14: pend.filter((x) => age(x.d) > 14).length };
+    const awaitingReply = n("first_dm_date != '' AND outreach_status NOT IN ('R','M','NUTR','NI') AND stage NOT IN ('Meeting Booked','Meeting Done','Closed')");
+    res.json({ counts: f, rates, period, pending, awaitingReply, bounds: b, byStatus: by('outreach_status'), byCategory: by('lead_category'), byPath: by('quality'), byTier: by('tier') });
   });
 
   // Paste once at the start of an AI chat: who we are, the rulebook and how to answer.

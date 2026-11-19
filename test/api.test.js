@@ -525,6 +525,27 @@ test('outreach funnel: dropdown validation, auto dates, funnel counts', async ()
   assert.ok(filtered.rows.some((r) => r.id === id));
 });
 
+test('funnel by period: today counts, empty past period, pending invites', async () => {
+  const a = await call('POST', '/api/leads', { first_name: 'Pia', last_name: 'Pending', email: 'pia@pending.co' });
+  await call('POST', `/api/leads/${a.id}/activities`, { type: 'linkedin_connect' });
+  const b = await call('POST', '/api/leads', { first_name: 'Ben', last_name: 'Both', email: 'ben@both.co' });
+  await call('POST', `/api/leads/${b.id}/activities`, { type: 'linkedin_connect' });
+  await call('POST', `/api/leads/${b.id}/activities`, { type: 'linkedin_connected' });
+  await call('POST', `/api/leads/${b.id}/activities`, { type: 'linkedin_dm' });
+  await call('POST', `/api/leads/${b.id}/activities`, { type: 'linkedin_inmail' });
+  await call('POST', `/api/leads/${b.id}/activities`, { type: 'email', note: 'hello' });
+  await call('PATCH', `/api/leads/${b.id}`, { outreach_status: 'R' });
+  const today = await call('GET', '/api/leads/funnel?range=today');
+  assert.ok(today.period.invites >= 2 && today.period.accepted >= 1 && today.period.messages >= 1);
+  assert.ok(today.period.inmails >= 1 && today.period.emails >= 1 && today.period.replies >= 1);
+  assert.ok(today.pending.total >= 1 && today.pending.upTo7 >= 1);
+  const past = await call('GET', '/api/leads/funnel?range=custom&from=2020-01-01&to=2020-01-31');
+  assert.equal(past.period.invites, 0);
+  assert.equal(past.period.messages, 0);
+  const all = await call('GET', '/api/leads/funnel?range=all');
+  assert.ok(all.period.invites >= today.period.invites);
+});
+
 test('importing a Master Leads row brings stage, meetings, activity log and funnel dates', async () => {
   const notes = '--- Activity Log ---\n[Oct 10, 2026, 4:10 PM - Tawhid] Connection Request via Personal LinkedIn\n[Oct 7, 2026, 10:38 AM - Safiul Alom] Profile View via Personal LinkedIn\n[Earlier - Safiul Alom] Cold via Personal LinkedIn';
   const q = (s) => '"' + s.replace(/"/g, '""') + '"';

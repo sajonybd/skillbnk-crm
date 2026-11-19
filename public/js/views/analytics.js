@@ -52,11 +52,26 @@ export async function render(root, ctx) {
 
   async function loadFunnel() {
     try {
-      const { counts: c, rates: r, byPath } = await api('GET', '/api/leads/funnel?' + qs({ owner: state.user }));
+      const d = await api('GET', '/api/leads/funnel?' + qs({ owner: state.user, user: state.user, range: state.range === 'all' ? 'all' : state.range, from: state.from, to: state.to }));
+      const { counts: c, rates: r, byPath, period: p, pending: pd } = d;
       const pct = (v) => (v == null ? '—' : v + '%');
+      const rate = (a, b) => (b ? Math.round((a / b) * 1000) / 10 + '%' : '—');
       const step = (label, n, note) => h('div', { class: 'metric' }, h('div', { class: 'muted' }, label), h('div', { style: 'font-size:22px;font-weight:600' }, n.toLocaleString()), note ? h('div', { class: 'muted' }, note) : null);
       const paths = Object.entries(byPath).filter(([k]) => k).map(([k, n]) => `${k}: ${n}`).join(' · ') || 'No lead types set yet';
-      fill(funnelBox, h('h3', null, 'Outreach funnel (all time)'),
+      const label = (TABS.find((t) => t[0] === state.range) || ['', 'selected period'])[1];
+      fill(funnelBox,
+        h('h3', null, `Outreach results · ${label}`),
+        h('div', { class: 'muted', style: 'margin-bottom:8px' }, (state.user ? 'Actions by the selected person' : 'Actions by the whole team') + ', counted from the activity log. Leads are counted once each.'),
+        h('div', { class: 'metrics' },
+          step('Connection requests', p.invites), step('Accepted', p.accepted, 'Acceptance ' + rate(p.accepted, p.invites)),
+          step('Messages (DM)', p.messages, p.messagedLeads + ' leads'), step('InMails', p.inmails),
+          step('Emails', p.emails, p.emailedLeads + ' leads'), step('Replies', p.replies, 'Reply ' + rate(p.replies, p.messagedLeads)),
+          step('Meetings booked', p.meetingsBooked), step('Comments', p.comments), step('Likes', p.likes), step('Follows', p.follows)),
+        h('h3', { style: 'margin-top:16px' }, 'Right now' + (state.user ? ' (leads owned by the selected person)' : ' (all leads)')),
+        h('div', { class: 'metrics' },
+          step('Invites pending', pd.total, `${pd.upTo7} up to 7 days · ${pd.d8to14} 8–14 days · ${pd.over14} over 14 days`),
+          step('Messaged, no reply yet', d.awaitingReply)),
+        h('h3', { style: 'margin-top:16px' }, 'Outreach funnel (all time)'),
         h('div', { class: 'metrics' },
           step('Researched', c.researched), step('Invited', c.invited), step('Accepted', c.accepted, 'Acceptance ' + pct(r.acceptance)),
           step('First DM', c.firstDm), step('Replied', c.replied, 'Reply ' + pct(r.reply)), step('Meetings', c.meetings, 'Of replies ' + pct(r.meeting))),
