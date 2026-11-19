@@ -6,8 +6,10 @@ test('fit: size bands from headcount text', () => {
   assert.equal(sizeOf('12').band, 'sweet');
   assert.equal(sizeOf('11-50').band, 'sweet');
   assert.equal(sizeOf('50').band, 'sweet');
-  assert.equal(sizeOf('51').band, 'big');
-  assert.equal(sizeOf('51-200').band, 'big');
+  assert.equal(sizeOf('51').band, 'sweet'); // limit raised from 50 to 100 on 19 Nov 2026
+  assert.equal(sizeOf('101').band, 'big');
+  assert.equal(sizeOf('101-200').band, 'big');
+  assert.equal(sizeOf('51-200').band, 'unknown'); // crosses the 100 line
   assert.equal(sizeOf('1,001+').band, 'big');
   assert.equal(sizeOf('8').band, 'small');
   assert.equal(sizeOf('1-10').band, 'unknown'); // crosses the 10 line
@@ -68,13 +70,38 @@ test('location in India is screened by place, never by name', () => {
   assert.equal(f.suggest, 'good');
 });
 
-test('Company employee training: 51-200 own-staff companies are TRY, others stay skip', () => {
+test('Company employee training: 101-200 own-staff companies are TRY, others stay skip (limit raised to 100 on 19 Nov 2026)', () => {
   const base = { title: 'Director', stage: 'New', outreach_status: 'U' };
-  assert.equal(fitOf({ ...base, employees: '51-200', industry: 'restaurants', company: 'Evviva Trattoria' }).suggest, 'try');
+  assert.equal(fitOf({ ...base, employees: '101-200', industry: 'restaurants', company: 'Evviva Trattoria' }).suggest, 'try');
   assert.equal(fitOf({ ...base, employees: '150', industry: 'manufacturing', company: 'Acme Parts' }).suggest, 'try');
   assert.equal(fitOf({ ...base, employees: '201-500', industry: 'pharmaceuticals', company: 'Accord' }).suggest, 'skip');
-  assert.equal(fitOf({ ...base, employees: '51-200', industry: 'e-learning', company: 'Northfield Training Academy' }).suggest, 'skip');
+  assert.equal(fitOf({ ...base, employees: '101-200', industry: 'e-learning', company: 'Northfield Training Academy' }).suggest, 'skip');
   assert.equal(fitOf({ ...base, employees: '200+', industry: 'retail', company: 'Big Retail' }).suggest, 'skip');
+});
+
+test('size rule 19 Nov 2026: up to 100 employees is fine for a company, over 100 is big', () => {
+  const base = { title: 'Founder', stage: 'New', outreach_status: 'U', industry: 'manufacturing', company: 'Acme Parts' };
+  assert.equal(sizeOf('51-100').band, 'sweet');
+  assert.equal(sizeOf('100').band, 'sweet');
+  assert.equal(sizeOf('101').band, 'big');
+  assert.equal(fitOf({ ...base, employees: '75' }).suggest, 'good');
+  assert.equal(fitOf({ ...base, employees: '100' }).suggest, 'good');
+  assert.equal(fitOf({ ...base, employees: '400' }).suggest, 'skip');
+});
+
+test('size rule 19 Nov 2026: a training center over 20 employees is skip', () => {
+  const base = { title: 'Founder', stage: 'New', outreach_status: 'U' };
+  const a = fitOf({ ...base, employees: '60', industry: 'e-learning', company: 'Learning Life' });
+  assert.equal(a.suggest, 'skip'); assert.equal(a.size, 'trainbig');
+  assert.equal(fitOf({ ...base, employees: '22', industry: 'professional training & coaching', company: 'Ignite Selling' }).suggest, 'skip');
+  assert.equal(fitOf({ ...base, employees: '20', industry: 'professional training & coaching', company: 'Ignite Selling' }).suggest, 'good');
+  assert.equal(fitOf({ ...base, employees: '12', industry: 'education management', company: 'Onsen Training' }).suggest, 'good');
+  // a range that crosses 20 means: find the real headcount
+  assert.equal(fitOf({ ...base, employees: '11-50', industry: 'professional training & coaching', company: 'Acme Academy' }).suggest, 'qualify');
+  // a company that is not a training center keeps the 100 limit
+  assert.equal(fitOf({ ...base, employees: '60', industry: 'construction', company: 'Acme Builders' }).suggest, 'good');
+  // active relationships are exempt
+  assert.equal(fitOf({ ...base, employees: '60', industry: 'e-learning', company: 'Learning Life', stage: 'Replied', outreach_status: 'R' }).suggest, 'qualify');
 });
 
 test('competitor: LMS or e-learning software company is skip', () => {

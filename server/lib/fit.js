@@ -1,8 +1,9 @@
-import { TRY_TEST } from '../config.js';
+import { TRY_TEST, SIZE_RULE } from '../config.js';
 // Fit hints for a lead, worked out only from what is already recorded (headcount and job title).
 // These are SUGGESTIONS for a person to check. Nothing here changes a lead, a verdict or a dropdown.
-// Rules come from the outreach rules v8: more than 50 employees = big company (skip as a direct customer),
-// 10–50 is the sweet spot, under 10 is nurture, and a contact who cannot decide cannot be a PURSUE lead.
+// Rules come from the outreach rules v8 and Part 23 (19 Nov 2026): more than 100 employees = big company (skip as a direct customer),
+// a training center / training provider with more than 20 employees = skip (it already uses a solution),
+// 10–100 is the right size for a company that trains its own staff, under 10 is nurture, and a contact who cannot decide cannot be a PURSUE lead.
 
 const nums = (s) => (String(s ?? '').replace(/,/g, '').match(/\d+/g) || []).map(Number);
 
@@ -13,9 +14,9 @@ export function sizeOf(employees) {
   const plus = /\+/.test(String(employees));
   const lo = n[0];
   const hi = plus ? Infinity : n.length > 1 ? n[1] : n[0];
-  if (lo > 50) return { band: 'big', lo, hi };
+  if (lo > SIZE_RULE.big_over) return { band: 'big', lo, hi };
   if (hi < 10) return { band: 'small', lo, hi };
-  if (lo >= 10 && hi <= 50) return { band: 'sweet', lo, hi };
+  if (lo >= 10 && hi <= SIZE_RULE.big_over) return { band: 'sweet', lo, hi };
   return { band: 'unknown', lo, hi }; // a range that crosses a line, for example 11–200
 }
 
@@ -38,8 +39,9 @@ export function authorityOf(title) {
 }
 
 const SIZE_TEXT = {
-  big: ['red', 'Over 50 employees: a big company. Suggest SKIP as a direct customer (cold outreach only).'],
-  sweet: ['green', '10–50 employees: the sweet spot.'],
+  big: ['red', 'Over 100 employees: a big company. Suggest SKIP as a direct customer (cold outreach only).'],
+  sweet: ['green', '10–100 employees: the right size for a company that trains its own staff.'],
+  trainbig: ['red', 'Training center with more than 20 employees: it already uses an LMS or another solution. Suggest SKIP as a customer (cold outreach only).'],
   small: ['amber', 'Under 10 employees: suggest NURTURE unless a clear need is shown.'],
   unknown: ['grey', 'Headcount not clear: find it first (suggest QUALIFY, no invite yet).'],
 };
@@ -71,6 +73,20 @@ export function signalsOf(lead) {
   return { competitor, loc_tone: loc[0], loc_text: loc[1], michigan: mi, india, train_tone: tr[0], train_text: tr[1], training: tr[0] === 'green' };
 }
 
+// Training center / academy / training provider: stricter than TRAIN above (that one is only an information signal).
+const TRAIN_CENTER = /\b(train(ing|er|ers)?|academy|institute|coach(es|ing)?|e-?learning|school|bootcamp|education management|college|tutoring|learning cent(er|re))\b/i;
+export function isTrainingCenter(lead) {
+  return TRAIN_CENTER.test([lead.industry, lead.company].join(' '));
+}
+// -> 'over' | 'ok' | 'cross' | 'unknown' : headcount against the training-center line
+function trainingSize(employees) {
+  const { band, lo, hi } = sizeOf(employees);
+  if (band === 'unknown' && lo === undefined) return 'unknown';
+  if (lo > SIZE_RULE.training_center_over) return 'over';
+  if (hi <= SIZE_RULE.training_center_over) return 'ok';
+  return 'cross'; // the range crosses the line, for example 11–50: find the real headcount
+}
+
 // Competitors: companies that sell an LMS, e-learning or course-platform software. Not customers.
 const COMPETITOR = /\b(lms|learning management|learning platform|e-?learning (platform|software|solutions?)|online course (platform|software)|course (platform|software)|training (software|platform)|ed-?tech|learning (technology|software))\b/i;
 // Nonprofit / NGO: not excluded. What matters is where the money comes from (own earned income is good; donations are relationship only).
@@ -81,19 +97,26 @@ export function nonprofitOf(lead) {
 
 // One suggestion from the two signals. A person confirms it.
 export function fitOf(lead) {
-  const size = sizeOf(lead.employees).band;
+  let size = sizeOf(lead.employees).band;
+  const trainCenter = isTrainingCenter(lead);
+  const tSize = trainCenter ? trainingSize(lead.employees) : 'n/a';
+  const trainOver = tSize === 'over';
+  if (trainOver) size = 'trainbig';
   const authority = authorityOf(lead.title);
   let suggest, why;
   // The big-company rule is for COLD outreach. A lead already in conversation, with a meeting, or past it, is an active relationship.
   const active = ['R', 'M'].includes(lead.outreach_status) || ['Replied', 'Meeting Booked', 'Meeting Done'].includes(lead.stage);
-  if (size === 'big' && active) { suggest = 'qualify'; why = 'Over 50 employees, but already in an active conversation or meeting. The size rule is for cold outreach: do not close it. Continue and let the owner decide.'; }
+  if (trainOver && active) { suggest = 'qualify'; why = 'Training center with more than 20 employees, but already in an active conversation or meeting. The size rule is for cold outreach: do not close it. Continue and let the owner decide.'; }
+  else if (size === 'big' && active) { suggest = 'qualify'; why = 'Over 100 employees, but already in an active conversation or meeting. The size rule is for cold outreach: do not close it. Continue and let the owner decide.'; }
   else if (signalsOf(lead).competitor && !active) { suggest = 'skip'; why = 'Looks like an LMS or e-learning software company: a competitor of skillBNK. Skip as a customer. Verify on the website first; if it is a real fit as a partner, ask the owner.'; }
+  else if (trainOver) { suggest = 'skip'; why = 'Training center with more than 20 employees (CEO rule, 19 Nov 2026): it already uses an LMS or another solution. Skip as a customer; the honest paths left are partner or AI video content.'; }
+  else if (tSize === 'cross' && size !== 'big') { suggest = 'qualify'; why = 'Training center whose headcount range crosses 20 employees: find the real headcount first. Over 20 = skip.'; }
   else if (signalsOf(lead).india && !active) { suggest = 'skip'; why = 'Located in India: strict screening. Skip unless there is clear evidence of active, structured training and decision-making authority.'; }
   else if (size === 'big' && TRY_TEST.enabled && sizeOf(lead.employees).hi <= TRY_TEST.max_employees && !signalsOf(lead).training) {
     suggest = 'try';
-    why = `Over 50 but up to ${TRY_TEST.max_employees} employees. Company employee training (approved 12 Nov 2026 as told by Shiblu): try it only if it trains its OWN staff, no LMS is found, there is a recurring training need and a path to the owner or an executive. Max ${TRY_TEST.per_person_per_week} per person per week.`;
+    why = `Over 100 but up to ${TRY_TEST.max_employees} employees. Company employee training (approved 12 Nov 2026 as told by Shiblu): try it only if it trains its OWN staff, no LMS is found, there is a recurring training need and a path to the owner or an executive. Max ${TRY_TEST.per_person_per_week} per person per week.`;
   }
-  else if (size === 'big') { suggest = 'skip'; why = authority === 'low' ? 'Big company and a contact who cannot decide.' : 'Big company (over 50 employees).'; }
+  else if (size === 'big') { suggest = 'skip'; why = authority === 'low' ? 'Big company and a contact who cannot decide.' : 'Big company (over 100 employees).'; }
   else if (size === 'small') { suggest = 'nurture'; why = 'Under 10 employees.'; }
   else if (size === 'unknown') { suggest = 'qualify'; why = 'Headcount is missing or unclear.'; }
   else if (authority === 'low') { suggest = 'qualify'; why = 'Right size, but this contact probably cannot decide. Find the owner or CEO.'; }
@@ -104,7 +127,7 @@ export function fitOf(lead) {
     ...signalsOf(lead), nonprofit: nonprofitOf(lead),
     np_text: nonprofitOf(lead) ? 'Looks like a nonprofit or NGO: not excluded. Check where the money comes from (own earned income and contracts = good; mostly grants, donations or government = relationship only), whether they train their own staff, and who pays for the training.' : '',
     size, authority, suggest, why,
-    size_tone: tryTest ? 'amber' : SIZE_TEXT[size][0], size_text: tryTest ? 'Over 50 employees, up to 200: a company employee training candidate (see the checklist).' : SIZE_TEXT[size][1],
+    size_tone: tryTest ? 'amber' : SIZE_TEXT[size][0], size_text: tryTest ? 'Over 100 employees, up to 200: a company employee training candidate (see the checklist).' : SIZE_TEXT[size][1],
     auth_tone: AUTH_TEXT[authority][0], auth_text: AUTH_TEXT[authority][1],
   };
 }

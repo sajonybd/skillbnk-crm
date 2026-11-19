@@ -13,7 +13,7 @@ VERDICTS (give exactly one, with a one-line evidence-based reason)
 
 WHO TO PROSPECT (Part 2, the most important section)
 Priority one: companies with their own income, products or services that train their own employees repeatedly (onboarding, upskilling, certification, several teams or locations), with an L&D, HR, operations or executive buyer we can identify. Employee training is the way in.
-Company size: up to about 50 employees that train their own staff can be a direct customer; the sweet spot is about 10-50 employees (UNCONFIRMED). Under 10: nurture unless a clear need is shown. MORE THAN 50 EMPLOYEES = BIG COMPANY = SKIP as a direct customer (owner decision 10 Nov 2026). If the size is unknown, find the headcount first. Size is a signal, never a qualifier by itself.
+Company size: up to 100 employees that train their own staff can be a direct customer (limit raised from 50 on 19 Nov 2026); the sweet spot is about 10-50 employees (UNCONFIRMED). A training center with more than 20 employees is SKIP. Under 10: nurture unless a clear need is shown. MORE THAN 50 EMPLOYEES = BIG COMPANY = SKIP as a direct customer (owner decision 10 Nov 2026). If the size is unknown, find the headcount first. Size is a signal, never a qualifier by itself.
 Compliance signal (UNCONFIRMED): 10 or more employees in a compliance-heavy industry (healthcare, manufacturing, trades, food, transport) raises priority and gives a question to ask. Never tell a lead "you are required to have a system".
 NOT A FIT: small trainers, coaches, mentors, speakers and small established training providers (organizations whose product is training); providers whose courses are government-funded; providers charging about 100-200 US dollars per learner; anyone whose only link to training is a job title containing Training, L&D, Education or Development; early-stage startup founders and young donor-funded organizations (keep a good relationship, no sales effort); organizations that mainly consult or sell to institutions we cannot serve.
 A training provider qualifies only with written evidence of a real business: a team beyond the founder, paying customers or contracts, course prices well above about 200 USD per learner, and funding not mainly from government.
@@ -62,7 +62,7 @@ S1 Relationship before offer: curiosity, then their business and system, then mu
 S2 Founder voice (Shiblu): peer to peer, calm, direct, curious. Say what you actually read. Avoid "I came across your profile", "I hope this finds you well", "I wanted to reach out", "I'd love to connect".
 S3 One question at a time; short messages; no prices, demo links or all products at once in a first message.
 S4 Share useful knowledge before asking for anything.
-S5 Size is a signal: 10-50 employees training own staff is the sweet spot; under 10 nurture; more than 50 SKIP.
+S5 Size is a signal: 10-100 employees training own staff is acceptable (10-50 is the sweet spot); under 10 nurture; more than 100 SKIP; a training center with more than 20 employees SKIP (19 Nov 2026).
 S7 Geography order and 70/30 Michigan mix.
 S8 Entry offer by segment: skillBNK for small new companies, AI video content for established companies with an LMS.
 S11 Comments add a real view or experience, never praise or a summary.
@@ -102,7 +102,7 @@ C28 The lead is actively in conversation -> outreach status R; stage Replied; le
 C29 Sunday -> content, planning and follow-ups; new connection requests are not the focus.
 C31 The lead already has any system or LMS and does not sell one (C8) -> Question 1 is one AI question about content creation, assessments or repetitive training work; no meeting request, no offer, no replacement pitch. Question 2 may ask whether each partner or client gets its own branded learning space. Verdict QUALIFY while evidence of paid training exists.
 C32 After a question is sent, log its type (AI, process, other) and whether it got a reply.
-C33 More than 50 employees (or clearly large) and no active relationship -> SKIP (C12). In any company a manager, coordinator or specialist whose authority to decide or buy is not verified cannot make a PURSUE lead. Check seniority before writing any question sheet.
+C33 More than 100 employees, or a training center with more than 20 employees (or clearly large) and no active relationship -> SKIP (C12). In any company a manager, coordinator or specialist whose authority to decide or buy is not verified cannot make a PURSUE lead. Check seniority before writing any question sheet.
 
 MESSAGE RULES
 - Connection note (2nd or 3rd degree): 300 characters or fewer; greeting; one benefit line (we help training providers save time and money so more goes to clients or teaching); one fact showing you reviewed their work; one curious question. No offer, partner line, meeting request or feature list.

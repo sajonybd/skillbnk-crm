@@ -20,7 +20,7 @@ export function guideOf(l, { fit, counts = {}, today, rules, meetings = [] }) {
   if (fit?.suggest === 'skip') {
     return g({ kind: 'verify_skip', action: 'Check the size, then most likely mark SKIP', channel: 'research', due: today,
       why: fit.why,
-      how: ['Open the company LinkedIn page and read the employee count.', 'If it is more than 50 employees, or the person is only a manager who cannot decide, set Lead type = Not a Fit and write the reason in Denial reason.', 'If the count is wrong or the person is the owner or CEO, write what you found in Notes and carry on.'],
+      how: ['Open the company LinkedIn page and read the employee count.', 'If it is more than 100 employees (or a training center with more than 20), or the person is only a manager who cannot decide, set Lead type = Not a Fit and write the reason in Denial reason.', 'If the count is wrong or the person is the owner or CEO, write what you found in Notes and carry on.'],
       dont: ['Do not send a note or message while this is open.'] });
   }
 

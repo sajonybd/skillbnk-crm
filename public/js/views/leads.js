@@ -83,7 +83,7 @@ export async function render(root, ctx) {
   ]);
   const ft = facets.fit || { size: {}, authority: {}, suggest: {} };
   const sizeSel = sel('size', [h('option', { value: '' }, 'Any size'),
-    ...[['sweet', '10–50 employees'], ['big', 'Over 50 (big)'], ['small', 'Under 10'], ['unknown', 'Size unknown']].map(([k, t]) => h('option', { value: k }, `${t} (${ft.size[k] || 0})`))]);
+    ...[['sweet', '10–100 employees'], ['big', 'Over 100 (big)'], ['trainbig', 'Training center over 20'], ['small', 'Under 10'], ['unknown', 'Size unknown']].map(([k, t]) => h('option', { value: k }, `${t} (${ft.size[k] || 0})`))]);
   const authSel = sel('authority', [h('option', { value: '' }, 'Any title'),
     ...[['dm', 'Decision maker'], ['maybe', 'Director / VP / head'], ['low', 'Likely cannot decide'], ['unknown', 'Title unclear']].map(([k, t]) => h('option', { value: k }, `${t} (${ft.authority[k] || 0})`))]);
   const sugSel = sel('suggest', [h('option', { value: '' }, 'Any suggestion'),
@@ -288,7 +288,7 @@ export async function render(root, ctx) {
             h('div', null, h('a', { class: 'nm', onclick: open }, fullName(l)), h('div', { class: 'sub' }, l.title), where ? h('div', { class: 'sub' }, where) : null,
               WORK_TAG[l.work] ? h('div', { style: 'margin-top:4px' }, h('span', { class: 'wtag ' + WORK_TAG[l.work][1] }, WORK_TAG[l.work][0]), due && !['meeting', 'nurture', 'declined', 'notfit'].includes(l.work) ? h('span', { class: 'wtag red', style: 'margin-left:4px' }, 'Due') : null) : null))),
           h('td', { class: 'company' }, h('div', { class: 'nm' }, l.company), h('div', { class: 'sub' }, [l.industry, l.employees ? `${l.employees} emp` : ''].filter(Boolean).join(' · ')),
-            l.fit && l.quality !== 'Not a Fit' ? h('div', { class: 'fitrow', title: l.fit.why + ' (a suggestion: please verify)' }, h('span', { class: 'fitchip ' + l.fit.size_tone }, { big: '50+ emp', sweet: '10–50', small: '<10', unknown: 'size ?' }[l.fit.size]), h('span', { class: 'fitchip ' + l.fit.auth_tone }, { dm: 'decides', maybe: 'check role', low: 'cannot decide', unknown: 'role ?' }[l.fit.authority]), l.fit.suggest === 'skip' ? h('span', { class: 'fitchip red solid' }, 'Suggest SKIP') : null) : null,
+            l.fit && l.quality !== 'Not a Fit' ? h('div', { class: 'fitrow', title: l.fit.why + ' (a suggestion: please verify)' }, h('span', { class: 'fitchip ' + l.fit.size_tone }, { big: '100+ emp', trainbig: 'Training 20+', sweet: '10–100', small: '<10', unknown: 'size ?' }[l.fit.size]), h('span', { class: 'fitchip ' + l.fit.auth_tone }, { dm: 'decides', maybe: 'check role', low: 'cannot decide', unknown: 'role ?' }[l.fit.authority]), l.fit.suggest === 'skip' ? h('span', { class: 'fitchip red solid' }, 'Suggest SKIP') : null) : null,
             l.source ? h('div', { style: 'margin-top:4px' }, h('span', { class: 'srcpill', title: l.source }, l.source)) : null),
           h('td', null,
             l.email ? h('div', { class: 'emailcell' }, h('span', { class: 'vdot' + (st === 'verified' ? ' v' : st ? ' b' : ''), title: l.email_status || 'Unknown status' }),

@@ -35,7 +35,7 @@ export const DEFAULT_PLAYBOOK = `# skillBNK outreach rules
 - A step more than 14 days late is stale. Close it or move it to nurture; do not chase it.
 
 ## Company employee training (approved as told by Shiblu, relayed by Safiul on 12 Nov 2026; written yes still wanted, H24)
-A company with 51 to 200 employees that trains its **own** staff (does not sell training), with no LMS found, a recurring training need and a path to the owner or an executive, may be tried instead of skipped. Over 200 stays SKIP when cold. Training providers over 50 stay SKIP as customers (they already have an LMS). Companies that sell an LMS or e-learning software are our competitors: SKIP. Max 3 to 5 such leads per person per week. Write "QUALIFY - TRY (company training)" in Assessment. Review every Saturday: replies, meetings and time spent, and stop if it does not work.
+A company with 101 to 200 employees that trains its **own** staff (does not sell training), with no LMS found, a recurring training need and a path to the owner or an executive, may be tried instead of skipped. Over 200 stays SKIP when cold. Training centers and providers over 20 employees stay SKIP as customers (19 Nov 2026) (they already have an LMS). Companies that sell an LMS or e-learning software are our competitors: SKIP. Max 3 to 5 such leads per person per week. Write "QUALIFY - TRY (company training)" in Assessment. Review every Saturday: replies, meetings and time spent, and stop if it does not work.
 
 ## Meetings
 - Never in a first message. Only after the lead replied with something specific about their training, or invited a call.

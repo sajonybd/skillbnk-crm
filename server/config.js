@@ -133,3 +133,6 @@ export const OUTREACH_DATE_FIELDS = ['invite_sent_date', 'accepted_date', 'first
 // company employee training rule (approved as told by Shiblu on 12 Nov 2026 (relayed by Safiul); the owner's written yes is still wanted, H24): companies over 50 employees that train their own staff
 // are suggested as TRY instead of SKIP, up to this size. Set enabled to false to switch this rule off everywhere in the CRM.
 export const TRY_TEST = { enabled: true, max_employees: 200, per_person_per_week: '3 to 5' };
+// Size rule, changed 19 Nov 2026 (CEO direction relayed by Safiul): a company over big_over employees is a big company (SKIP when cold).
+// A training center / training provider over training_center_over employees is SKIP: it already uses an LMS or another solution.
+export const SIZE_RULE = { big_over: 100, training_center_over: 20 };
