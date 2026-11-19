@@ -98,7 +98,8 @@ export function nonprofitOf(lead) {
 // One suggestion from the two signals. A person confirms it.
 export function fitOf(lead) {
   let size = sizeOf(lead.employees).band;
-  const trainCenter = isTrainingCenter(lead);
+  // A nonprofit stays a nonprofit (100 limit), even with Academy or Institute in its name (owner, 19 Nov 2026). Only a training business counts as a training center.
+  const trainCenter = isTrainingCenter(lead) && !nonprofitOf(lead);
   const tSize = trainCenter ? trainingSize(lead.employees) : 'n/a';
   const trainOver = tSize === 'over';
   if (trainOver) size = 'trainbig';

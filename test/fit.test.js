@@ -100,6 +100,9 @@ test('size rule 19 Nov 2026: a training center over 20 employees is skip', () =>
   assert.equal(fitOf({ ...base, employees: '11-50', industry: 'professional training & coaching', company: 'Acme Academy' }).suggest, 'qualify');
   // a company that is not a training center keeps the 100 limit
   assert.equal(fitOf({ ...base, employees: '60', industry: 'construction', company: 'Acme Builders' }).suggest, 'good');
+  // a nonprofit is a nonprofit: the 100 limit applies, not the training-center 20 limit
+  assert.equal(fitOf({ ...base, employees: '60', industry: 'nonprofit organization management', company: 'Detroit Food & Entrepreneurship Academy' }).suggest, 'good');
+  assert.equal(fitOf({ ...base, employees: '300', industry: 'nonprofit organization management', company: 'Learning Grove' }).suggest, 'skip');
   // active relationships are exempt
   assert.equal(fitOf({ ...base, employees: '60', industry: 'e-learning', company: 'Learning Life', stage: 'Replied', outreach_status: 'R' }).suggest, 'qualify');
 });
