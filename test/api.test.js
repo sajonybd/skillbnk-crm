@@ -658,3 +658,15 @@ test('drafts: create, edit clears approval, mark sent logs the activity, discard
   const list = await call('GET', '/api/leads/drafts?status=ready');
   assert.ok(!list.rows.some((d) => d.id === e.draft.id));
 });
+
+test('new targets: website research needs a finding, is not a touch, and members get default rows', async () => {
+  const made = await call('POST', '/api/leads', { first_name: 'Rae', last_name: 'Research', company: 'ResCo', email: 'rae@resco.test' });
+  const id = (made.lead || made).id;
+  assert.equal((await call('POST', `/api/leads/${id}/activities`, { type: 'website_research' })).status, 400);
+  assert.equal((await call('POST', `/api/leads/${id}/activities`, { type: 'website_research', note: 'resco.test: sells forklift training, 12 staff, no LMS found' })).status, 201);
+  const det = await call('GET', `/api/leads/${id}`);
+  assert.equal(det.lead.stage, 'New', 'research alone does not make the lead Contacted');
+  assert.equal((await call('POST', `/api/leads/${id}/activities`, { type: 'linkedin_followup', note: 'Thanks for the reply' })).status, 201);
+  const t = await call('GET', '/api/targets');
+  assert.ok(t.metrics.website_research && t.metrics.linkedin_comment_reply && t.metrics.linkedin_followup);
+});

@@ -46,7 +46,7 @@ export const TYPE_ICON = {
   call: 'phone', email: 'mail', meeting: 'calendar', note: 'note', linkedin: 'linkedin',
   linkedin_view: 'eye', linkedin_follow: 'userPlus', linkedin_like: 'thumbsUp', linkedin_comment: 'message',
   linkedin_connect: 'link', linkedin_connected: 'userCheck', linkedin_inmail: 'mail', linkedin_dm: 'send',
-  linkedin_company_view: 'building',
+  linkedin_company_view: 'building', website_research: 'building', linkedin_comment_reply: 'message', linkedin_followup: 'send',
   meeting_booked: 'calendar', meeting_completed: 'check', meeting_cancelled: 'x', meeting_rescheduled: 'clock',
 };
 

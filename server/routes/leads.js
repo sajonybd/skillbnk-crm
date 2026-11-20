@@ -435,6 +435,9 @@ export function leadsRoutes(db) {
       comments: acts(['linkedin_comment'], false),
       likes: acts(['linkedin_like'], false),
       follows: acts(['linkedin_follow'], false),
+      websiteResearch: acts(['website_research'], true),
+      commentReplies: acts(['linkedin_comment_reply'], false),
+      followups: acts(['linkedin_followup'], false),
     };
     // Right now (not a period): invites still waiting, and first messages with no reply yet, by owner.
     const today = todayLocal();
@@ -749,6 +752,7 @@ export function leadsRoutes(db) {
     if (!(type in MANUAL_TYPES)) throw new HttpError(400, 'Unknown activity type');
     const text = String(note || '').trim();
     if (type === 'note' && !text) throw new HttpError(400, 'Write a note first');
+    if (type === 'website_research' && text.length < 15) throw new HttpError(400, 'Write what you found on the website (what they do, size, any LMS or platform)');
     const added = tx(db, () => recordActivity(lead, type, text, req.user));
     if (!added) return res.json({ ok: true, duplicate: true });
     res.status(201).json({ ok: true });

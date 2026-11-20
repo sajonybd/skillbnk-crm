@@ -49,6 +49,9 @@ export const MANUAL_TYPES = {
   linkedin_connected: 'Connected',
   linkedin_inmail: 'InMail',
   linkedin_dm: 'DM',
+  linkedin_comment_reply: 'Comment reply',
+  linkedin_followup: 'Follow-up / reply message',
+  website_research: 'Website research',
 };
 
 // The LinkedIn actions (shown as a group / menu in the UI).
@@ -59,7 +62,9 @@ export const COMPANY_VIEW_TYPE = 'linkedin_company_view';
 LINKEDIN_TYPES.push(COMPANY_VIEW_TYPE);
 
 // Outreach "touches" = every logged action except notes.
-export const TOUCH_TYPES = [...Object.keys(MANUAL_TYPES).filter((k) => k !== 'note'), COMPANY_VIEW_TYPE];
+// Website research is internal work (it needs a note with the finding), not a touch of the lead.
+export const RESEARCH_TYPE = 'website_research';
+export const TOUCH_TYPES = [...Object.keys(MANUAL_TYPES).filter((k) => k !== 'note' && k !== RESEARCH_TYPE), COMPANY_VIEW_TYPE];
 
 // Meetings: status of one booked meeting.
 export const MEETING_STATUSES = { booked: 'Booked', completed: 'Completed', cancelled: 'Cancelled' };
@@ -115,6 +120,7 @@ export const TEAM_DEFAULT_PASSWORD = process.env.TEAM_PASSWORD || 'welcome123';
 export const TARGET_METRICS = {
   linkedin_view: 'Profile reviews', linkedin_comment: 'Comments', linkedin_like: 'Post likes', linkedin_follow: 'Follows',
   linkedin_connect: 'Connection requests', linkedin_dm: 'Direct messages',
+  website_research: 'Website research', linkedin_comment_reply: 'Comment replies', linkedin_followup: 'Follow-up / reply messages',
 };
 
 // ── Outreach funnel (playbook Sections 40–42) ───────────────────────────────
@@ -145,6 +151,8 @@ export const DRAFT_CHANNELS = {
   linkedin_inmail: 'LinkedIn InMail',
   linkedin_comment: 'LinkedIn comment',
   linkedin_connect: 'Connection note',
+  linkedin_comment_reply: 'Comment reply',
+  linkedin_followup: 'Follow-up / reply message',
   email: 'Email',
 };
 export const DRAFT_SEND_WINDOW = 'from 5 PM Bangladesh time (6 AM ET) onward, USA morning';

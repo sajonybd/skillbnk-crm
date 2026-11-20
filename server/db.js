@@ -195,6 +195,10 @@ export function openDb(file) {
   `);
   const dcols = db.prepare('PRAGMA table_info(drafts)').all().map((c) => c.name);
   if (!dcols.includes('target_url')) db.exec("ALTER TABLE drafts ADD COLUMN target_url TEXT NOT NULL DEFAULT ''");
+  // New daily targets (website research, comment replies, follow-ups): give each member a row once; never overwrite a number someone changed.
+  for (const [m, n] of [['website_research', 30], ['linkedin_comment_reply', 10], ['linkedin_followup', 10]]) {
+    db.prepare("INSERT OR IGNORE INTO member_targets(user_id, metric, daily_target) SELECT id, ?, ? FROM users WHERE active = 1 AND role = 'member'").run(m, n);
+  }
   // Removed team members keep their history but disappear from the app.
   const ucols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   if (!ucols.includes('removed_at')) db.exec("ALTER TABLE users ADD COLUMN removed_at TEXT NOT NULL DEFAULT ''");
