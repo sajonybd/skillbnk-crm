@@ -470,6 +470,11 @@ export function leadsRoutes(db) {
     }
     if ('subject' in input) out.subject = String(input.subject ?? '').trim().slice(0, DRAFT_LIMITS.subject);
     if ('note' in input) out.note = String(input.note ?? '').trim().slice(0, DRAFT_LIMITS.note);
+    if ('target_url' in input) {
+      const u = String(input.target_url ?? '').trim().slice(0, 600);
+      if (u && !/^https:\/\//i.test(u)) throw new HttpError(400, 'The link must start with https://');
+      out.target_url = u;
+    }
     if ('send_window' in input) out.send_window = String(input.send_window ?? '').trim().slice(0, 120);
     return out;
   }
@@ -712,8 +717,8 @@ export function leadsRoutes(db) {
     if (dup) return res.json({ draft: draftOne(dup.id), duplicate: true });
     const now = new Date().toISOString();
     const id = tx(db, () => {
-      const ins = db.prepare('INSERT INTO drafts(lead_id, channel, subject, body, note, send_window, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
-        .run(lead.id, f.channel, f.subject || '', f.body, f.note || '', f.send_window || DRAFT_SEND_WINDOW, 'ready', req.user.id, now, now);
+      const ins = db.prepare('INSERT INTO drafts(lead_id, channel, subject, body, note, target_url, send_window, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+        .run(lead.id, f.channel, f.subject || '', f.body, f.note || '', f.target_url || '', f.send_window || DRAFT_SEND_WINDOW, 'ready', req.user.id, now, now);
       logActivity(db, { lead_id: lead.id, user_id: req.user.id, type: 'note', note: `Draft ready (${DRAFT_CHANNELS[f.channel]}), NOT sent: ${preview(f.body)}` });
       return Number(ins.lastInsertRowid);
     });

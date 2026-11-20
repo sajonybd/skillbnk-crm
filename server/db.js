@@ -193,6 +193,8 @@ export function openDb(file) {
     );
     CREATE INDEX IF NOT EXISTS idx_drafts_status ON drafts(status, lead_id);
   `);
+  const dcols = db.prepare('PRAGMA table_info(drafts)').all().map((c) => c.name);
+  if (!dcols.includes('target_url')) db.exec("ALTER TABLE drafts ADD COLUMN target_url TEXT NOT NULL DEFAULT ''");
   // Removed team members keep their history but disappear from the app.
   const ucols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   if (!ucols.includes('removed_at')) db.exec("ALTER TABLE users ADD COLUMN removed_at TEXT NOT NULL DEFAULT ''");

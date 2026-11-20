@@ -24,6 +24,11 @@ export function draftCard(d, { onChange = () => {}, showLead = false, ctx } = {}
     d.channel === 'email' && d.subject ? h('div', { style: 'margin-top:6px' }, h('b', null, 'Subject: '), d.subject) : null,
     h('div', { style: 'margin-top:6px' }, body),
     d.note ? h('div', { class: 'muted', style: 'margin-top:4px' }, 'Note: ' + d.note) : null,
+    (() => {
+      const url = d.target_url || (d.channel === 'email' ? '' : d.linkedin);
+      const label = d.channel === 'linkedin_comment' ? 'Open the post' : d.channel === 'linkedin_dm' || d.channel === 'linkedin_inmail' ? (d.target_url ? 'Open the message thread' : 'Open profile') : d.channel === 'linkedin_connect' ? 'Open profile' : '';
+      return url && label ? h('div', { style: 'margin-top:6px' }, h('a', { class: 'btn small', href: /^https?:/i.test(url) ? url : 'https://' + url, target: '_blank', rel: 'noopener' }, icon('link', 14), label)) : null;
+    })(),
     ready ? h('div', { class: 'row', style: 'margin-top:8px;gap:6px;flex-wrap:wrap' },
       h('button', { class: 'btn small', onclick: () => { copyText(text); toast('Draft copied'); } }, icon('copy', 14), 'Copy'),
       h('button', { class: 'btn small', onclick: saveEdit }, 'Save edit'),

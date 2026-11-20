@@ -42,6 +42,7 @@ A company with 101 to 200 employees that trains its **own** staff (does not sell
 - Drafts are written during Bangladesh working hours. Comments and DMs are **sent by a person from 5 PM Bangladesh time (6 AM ET) onward**, after the draft is read and approved. Likes, follows, profile views and connection requests (with an approved note) can be done at any time.
 - Leads > **Draft ready** shows everything waiting. Copy the text, send it yourself on LinkedIn or email, then press **Mark sent**. That logs the activity and closes the draft.
 - Before a DM draft: read the real LinkedIn thread and confirm the person is a 1st-degree connection. If not, draft a connection note (300 characters or fewer) instead.
+- Every draft must carry a direct link (target_url): the exact post for a comment (and which comment, for a reply), the messaging thread for a DM, the profile for a connection note. One click must reach the right place.
 - AI agents: add drafts only (never send, never log as sent). Use the Shiblu voice: short lines, one curious question, no pitch on a first touch.
 
 ## Comment-first pipeline

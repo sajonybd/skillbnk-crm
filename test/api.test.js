@@ -629,8 +629,10 @@ test('drafts: create, edit clears approval, mark sent logs the activity, discard
   assert.equal(bad.status, 400);
   const long = await call('POST', `/api/leads/${id}/drafts`, { channel: 'linkedin_connect', body: 'x'.repeat(301) });
   assert.equal(long.status, 400);
-  const c = await call('POST', `/api/leads/${id}/drafts`, { channel: 'linkedin_dm', body: 'Hi Dee,\nQuick question.\nThanks, Shiblu' });
+  const c = await call('POST', `/api/leads/${id}/drafts`, { channel: 'linkedin_dm', body: 'Hi Dee,\nQuick question.\nThanks, Shiblu', target_url: 'https://www.linkedin.com/messaging/thread/abc/' });
   assert.equal(c.status, 201);
+  assert.equal(c.draft.target_url, 'https://www.linkedin.com/messaging/thread/abc/');
+  assert.equal((await call('POST', `/api/leads/${id}/drafts`, { channel: 'linkedin_comment', body: 'x', target_url: 'http://bad' })).status, 400);
   const did = c.draft.id;
   assert.equal(c.draft.status, 'ready');
   const dup = await call('POST', `/api/leads/${id}/drafts`, { channel: 'linkedin_dm', body: 'Hi Dee,\nQuick question.\nThanks, Shiblu' });
