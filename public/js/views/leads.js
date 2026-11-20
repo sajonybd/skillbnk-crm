@@ -4,6 +4,7 @@ import { icon, TYPE_ICON } from '../icons.js';
 import { openLead, openNewLead } from './lead-drawer.js';
 import { watchVisit } from '../visit.js';
 import { renderFollowups, followupCounts } from './followups.js';
+import { renderDrafts } from './drafts.js';
 
 // Filters survive page switches within the session.
 const state = { size: '', authority: '', suggest: '', q: '', owner: '', stage: '', quality: '', source: '', due: '', untouched: '', meeting: '', page: 1, limit: 50, sort: 'work', dir: 'asc', work: '', _init: false };
@@ -113,8 +114,9 @@ export async function render(root, ctx) {
   }
 
   // ── working stage tabs: few, colour-coded, one kind of work each ──
-  const WORK_TABS = [['', 'All', 'all'], ['_follow', 'Follow-ups due', 'red'], ['research', 'To research', 'amber'], ['engage', 'To engage', 'blue'], ['waiting', 'Waiting', 'grey'], ['meeting', 'Meeting booked', 'green'], ['parked', 'Parked', 'mute']];
+  const WORK_TABS = [['', 'All', 'all'], ['_drafts', 'Draft ready', 'purple'], ['_follow', 'Follow-ups due', 'red'], ['research', 'To research', 'amber'], ['engage', 'To engage', 'blue'], ['waiting', 'Waiting', 'grey'], ['meeting', 'Meeting booked', 'green'], ['parked', 'Parked', 'mute']];
   const WORK_HINT = {
+    _drafts: 'Messages, comments and emails written ahead of time. Nothing is sent by the CRM. Send them yourself in the USA morning (8 to 11 AM ET = 7 to 10 PM Bangladesh), then press Mark sent.',
     _follow: 'Do these today, from the top: replies first, then due, then late. Type what you wrote, then press the button.',
     research: 'Open the Web, Co and LI links, then set the lead type in the Lead type column. Not a Fit: write the reason in the lead.',
     engage: 'Real fits, no invite yet. Like, comment, follow (LinkedIn icon), then log Connection request or InMail. Connect starts the 7-day follow-up.',
@@ -135,6 +137,7 @@ export async function render(root, ctx) {
     try { workCounts = await api('GET', '/api/leads/work-counts?' + qs({ owner: state.owner })); } catch { /* keep old */ }
     try { fc = await followupCounts(assignee()); } catch { /* keep old */ }
     workCounts._follow = fc.actions;
+    try { workCounts._drafts = (await api('GET', '/api/leads/drafts/count?' + qs({ owner: state.owner }))).ready; } catch { workCounts._drafts = 0; }
     if (state.work === 'research' && /^\d+$/.test(state.owner)) {
       try { const r = await api('GET', '/api/plan/review?' + qs({ assignee: state.owner, mode: 'research' })); viewsLine = `${r.done} of ${r.target} profiles viewed today`; } catch { viewsLine = ''; }
     } else viewsLine = '';
@@ -185,10 +188,13 @@ export async function render(root, ctx) {
 
   async function load() {
     savePrefs();
-    const special = state.work === '_follow' || state.work === '_stale';
+    const special = state.work === '_follow' || state.work === '_stale' || state.work === '_drafts';
+    const isDrafts = state.work === '_drafts';
+    fuSwitch.style.display = isDrafts ? 'none' : '';
     toolbar.style.display = special ? 'none' : ''; tableWrap.style.display = special ? 'none' : ''; pager.style.display = special ? 'none' : ''; panel.style.display = special ? '' : 'none';
     if (special) {
       bulk.style.display = 'none';
+      if (isDrafts) { try { await renderDrafts(fuBody, ctx, { owner: state.owner, onChange: () => { drawWork(); load(); } }); } catch (e) { toast(e.message, true); } return; }
       try { await renderFollowups(fuBody, ctx, { assignee: assignee(), view: state.work === '_stale' ? 'stale' : 'queue', onChange: () => { drawWork(); load(); } }); } catch (e) { toast(e.message, true); }
       return;
     }

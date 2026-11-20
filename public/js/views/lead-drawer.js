@@ -2,6 +2,7 @@ import { api } from '../api.js';
 import { h, options, pill, fullName, fmtDateTime, timeAgo, toast, avatar, copyText, asUrl, todayStr } from '../util.js';
 import { watchVisit } from '../visit.js';
 import { icon, TYPE_ICON } from '../icons.js';
+import { draftCard } from './drafts.js';
 
 // Editable contact fields: [key, label, full width?]
 const DETAIL_FIELDS = [
@@ -73,8 +74,8 @@ export async function openLead(id, ctx, onChange = () => {}) {
   const closeAndNotify = close;
 
   async function load() {
-    const { lead, fit, guide, activities, meetings, links } = await api('GET', `/api/leads/${id}`);
-    draw(lead, activities, meetings, links, fit, guide);
+    const { lead, fit, guide, activities, meetings, links, drafts } = await api('GET', `/api/leads/${id}`);
+    draw(lead, activities, meetings, links, fit, guide, drafts || []);
   }
 
   async function save(patch, okMsg = 'Saved') {
@@ -193,7 +194,7 @@ export async function openLead(id, ctx, onChange = () => {}) {
     return h('section', null, h('h3', null, 'Links'), list, h('div', { class: 'resform' }, url, kind, label, add));
   }
 
-  function draw(l, acts, meetings, links, fit, guide) {
+  function draw(l, acts, meetings, links, fit, guide, drafts = []) {
     if (l.deleted_at) return drawTrashed(l, acts, meetings, links);
     const { stages, qualities, manualTypes } = ctx.config;
     const activeUsers = ctx.users.filter((u) => u.active);
@@ -320,6 +321,7 @@ export async function openLead(id, ctx, onChange = () => {}) {
           field('Owner', owner), field('Stage', stage),
           field('Lead type', quality), field('', h('span')),
           field('Next action', nextAction), field('Next action date', nextDate))),
+      drafts.some((d) => d.status === 'ready') || drafts.length ? h('section', null, h('h3', null, 'Drafts (not sent)'), drafts.map((d) => draftCard(d, { onChange: () => { changed = true; load(); }, ctx }))) : null,
       outreachSection,
       meetingsSection(l, meetings),
       linksSection(l, links),

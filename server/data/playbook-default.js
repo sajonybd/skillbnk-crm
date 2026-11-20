@@ -37,6 +37,13 @@ export const DEFAULT_PLAYBOOK = `# skillBNK outreach rules
 ## Company employee training (approved as told by Shiblu, relayed by Safiul on 12 Nov 2026; written yes still wanted, H24)
 A company with 101 to 200 employees that trains its **own** staff (does not sell training), with no LMS found, a recurring training need and a path to the owner or an executive, may be tried instead of skipped. Over 200 stays SKIP when cold. Training centers and providers over 20 employees stay SKIP as customers (19 Nov 2026) (they already have an LMS). Companies that sell an LMS or e-learning software are our competitors: SKIP. Max 3 to 5 such leads per person per week. Write "QUALIFY - TRY (company training)" in Assessment. Review every Saturday: replies, meetings and time spent, and stop if it does not work.
 
+## Drafts: write all day, send in the USA morning
+- Write every message, comment, email and connection note as a **draft** in the CRM (lead panel, or the API/AI agent). The CRM never sends anything.
+- Drafts are written during Bangladesh working hours. They are **sent by a person in the USA Eastern morning, 8 to 11 AM ET (7 to 10 PM in Dhaka)**, after the draft is read and approved.
+- Leads > **Draft ready** shows everything waiting. Copy the text, send it yourself on LinkedIn or email, then press **Mark sent**. That logs the activity and closes the draft.
+- Before a DM draft: read the real LinkedIn thread and confirm the person is a 1st-degree connection. If not, draft a connection note (300 characters or fewer) instead.
+- AI agents: add drafts only (never send, never log as sent). Use the Shiblu voice: short lines, one curious question, no pitch on a first touch.
+
 ## Meetings
 - Never in a first message. Only after the lead replied with something specific about their training, or invited a call.
 - Propose the window: **Tuesday, Wednesday or Thursday after 3 PM Michigan time**, and always state the time zone. A person checks the calendar before any exact time is named.

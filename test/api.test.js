@@ -619,3 +619,40 @@ test('import with update fills blanks of an existing lead without overwriting', 
   assert.equal(una.stage, 'Meeting Done');
   assert.equal((await call('GET', `/api/leads/${una.id}`)).meetings.length, 1);
 });
+
+test('drafts: create, edit clears approval, mark sent logs the activity, discard, connection note limit', async () => {
+  const made = await call('POST', '/api/leads', { first_name: 'Dee', last_name: 'Draft', company: 'DraftCo', email: 'dee@draftco.test' });
+  const lead = made.lead || made;
+  const id = lead.id;
+  assert.ok(id, 'lead created');
+  const bad = await call('POST', `/api/leads/${id}/drafts`, { channel: 'sms', body: 'x' });
+  assert.equal(bad.status, 400);
+  const long = await call('POST', `/api/leads/${id}/drafts`, { channel: 'linkedin_connect', body: 'x'.repeat(301) });
+  assert.equal(long.status, 400);
+  const c = await call('POST', `/api/leads/${id}/drafts`, { channel: 'linkedin_dm', body: 'Hi Dee,\nQuick question.\nThanks, Shiblu' });
+  assert.equal(c.status, 201);
+  const did = c.draft.id;
+  assert.equal(c.draft.status, 'ready');
+  const dup = await call('POST', `/api/leads/${id}/drafts`, { channel: 'linkedin_dm', body: 'Hi Dee,\nQuick question.\nThanks, Shiblu' });
+  assert.equal(dup.duplicate, true);
+  assert.equal((await call('GET', '/api/leads/drafts/count')).ready >= 1, true);
+  const ap = await call('PATCH', `/api/leads/drafts/${did}`, { approved: true });
+  assert.ok(ap.draft.approved_at);
+  const ed = await call('PATCH', `/api/leads/drafts/${did}`, { body: 'Hi Dee,\nNew text.' });
+  assert.equal(ed.draft.approved_at, '');
+  // Creating a draft logs a note only, never a sent message.
+  let det = await call('GET', `/api/leads/${id}`);
+  assert.equal(det.drafts.length, 1);
+  assert.ok(!det.activities.some((a) => a.type === 'linkedin_dm'));
+  assert.equal(det.lead.first_dm_date, '');
+  const sent = await call('POST', `/api/leads/drafts/${did}/sent`);
+  assert.equal(sent.draft.status, 'sent');
+  det = await call('GET', `/api/leads/${id}`);
+  assert.ok(det.activities.some((a) => a.type === 'linkedin_dm' && a.note.includes('New text')));
+  assert.notEqual(det.lead.first_dm_date, '');
+  assert.equal((await call('POST', `/api/leads/drafts/${did}/sent`)).status, 400);
+  const e = await call('POST', `/api/leads/${id}/drafts`, { channel: 'email', subject: 'Hello', body: 'Body' });
+  assert.equal((await call('DELETE', `/api/leads/drafts/${e.draft.id}`)).ok, true);
+  const list = await call('GET', '/api/leads/drafts?status=ready');
+  assert.ok(!list.rows.some((d) => d.id === e.draft.id));
+});

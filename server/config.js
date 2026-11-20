@@ -136,3 +136,16 @@ export const TRY_TEST = { enabled: true, max_employees: 200, per_person_per_week
 // Size rule, changed 19 Nov 2026 (CEO direction relayed by Safiul): a company over big_over employees is a big company (SKIP when cold).
 // A training center / training provider over training_center_over employees is SKIP: it already uses an LMS or another solution.
 export const SIZE_RULE = { big_over: 100, training_center_over: 20 };
+
+// ── Draft queue ──────────────────────────────────────────────────────────────
+// Drafts are written any time of day (Bangladesh working hours) and SENT by a person in the USA morning.
+// 8 to 11 AM Eastern (EST, winter) is 7 to 10 PM in Dhaka.
+export const DRAFT_CHANNELS = {
+  linkedin_dm: 'LinkedIn message',
+  linkedin_inmail: 'LinkedIn InMail',
+  linkedin_comment: 'LinkedIn comment',
+  linkedin_connect: 'Connection note',
+  email: 'Email',
+};
+export const DRAFT_SEND_WINDOW = 'USA Eastern morning, 8 to 11 AM ET (7 to 10 PM in Dhaka)';
+export const DRAFT_LIMITS = { body: 4000, connect_note: 300, subject: 200, note: 1000 };

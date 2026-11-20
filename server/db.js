@@ -182,6 +182,17 @@ export function openDb(file) {
       PRIMARY KEY (user_id, metric)
     );
   `);
+  // Drafts: messages, comments and emails prepared in advance (any hour), sent later in the USA morning by a person.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS drafts (
+      id INTEGER PRIMARY KEY, lead_id INTEGER NOT NULL REFERENCES leads(id), channel TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', send_window TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'ready',
+      created_by INTEGER REFERENCES users(id), created_at TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT '',
+      approved_by INTEGER REFERENCES users(id), approved_at TEXT NOT NULL DEFAULT '',
+      sent_by INTEGER REFERENCES users(id), sent_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_drafts_status ON drafts(status, lead_id);
+  `);
   // Removed team members keep their history but disappear from the app.
   const ucols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   if (!ucols.includes('removed_at')) db.exec("ALTER TABLE users ADD COLUMN removed_at TEXT NOT NULL DEFAULT ''");

@@ -1,7 +1,7 @@
 import { fitOf } from '../lib/fit.js';
 import { WORK_CASE, WORK_KEYS, WORK_GROUPS, workOrder } from '../lib/work.js';
 import { Router } from 'express';
-import { STAGES, QUALITIES, MANUAL_TYPES, FIRST_TOUCH_TYPES, COMPANY_VIEW_TYPE, MEETING_TYPES, LINK_KINDS, LEAD_CATEGORIES, TIERS, OUTREACH_STATUSES, CHANNELS, legacyPathToQuality } from '../config.js';
+import { STAGES, QUALITIES, MANUAL_TYPES, FIRST_TOUCH_TYPES, COMPANY_VIEW_TYPE, MEETING_TYPES, LINK_KINDS, LEAD_CATEGORIES, TIERS, OUTREACH_STATUSES, CHANNELS, legacyPathToQuality, DRAFT_CHANNELS, DRAFT_SEND_WINDOW, DRAFT_LIMITS } from '../config.js';
 import { HttpError, logActivity, tx } from '../db.js';
 import { dedupeKey, hasIdentity, findExisting } from '../lib/leadkey.js';
 import { requireAdmin } from '../auth.js';
@@ -450,6 +450,77 @@ export function leadsRoutes(db) {
     res.json(buildSetup({ playbook: db.prepare("SELECT value FROM settings WHERE key = 'playbook_md'").get()?.value }));
   });
 
+  // ── Draft queue ────────────────────────────────────────────────────────────
+  // Prepared messages / comments / emails. Nothing here is ever sent by the CRM: a person sends it, then presses "Mark sent".
+  const DRAFT_SELECT = `SELECT d.*, TRIM(l.first_name || ' ' || l.last_name) AS lead_name, l.company, l.title AS lead_title, l.linkedin, l.email AS lead_email,
+      l.owner_id, l.stage, l.outreach_status, l.state AS lead_state, uo.name AS owner_name, uc.name AS created_name, ua.name AS approved_name
+    FROM drafts d JOIN leads l ON l.id = d.lead_id LEFT JOIN users uo ON uo.id = l.owner_id LEFT JOIN users uc ON uc.id = d.created_by LEFT JOIN users ua ON ua.id = d.approved_by`;
+  const draftOne = (id) => db.prepare(`${DRAFT_SELECT} WHERE d.id = ?`).get(id);
+  function cleanDraft(input, { partial }) {
+    const out = {};
+    if (!partial || 'channel' in input) {
+      if (!Object.hasOwn(DRAFT_CHANNELS, input.channel)) throw new HttpError(400, 'Channel must be one of: ' + Object.keys(DRAFT_CHANNELS).join(', '));
+      out.channel = input.channel;
+    }
+    if (!partial || 'body' in input) {
+      const b = String(input.body ?? '').replace(/\r\n/g, '\n').trim();
+      if (!b) throw new HttpError(400, 'Write the draft text first');
+      if (b.length > DRAFT_LIMITS.body) throw new HttpError(400, `The draft is too long (max ${DRAFT_LIMITS.body} characters)`);
+      out.body = b;
+    }
+    if ('subject' in input) out.subject = String(input.subject ?? '').trim().slice(0, DRAFT_LIMITS.subject);
+    if ('note' in input) out.note = String(input.note ?? '').trim().slice(0, DRAFT_LIMITS.note);
+    if ('send_window' in input) out.send_window = String(input.send_window ?? '').trim().slice(0, 120);
+    return out;
+  }
+  const checkConnectNote = (channel, body) => {
+    if (channel === 'linkedin_connect' && body.length > DRAFT_LIMITS.connect_note) throw new HttpError(400, `A connection note must be ${DRAFT_LIMITS.connect_note} characters or fewer (this one is ${body.length})`);
+  };
+  const preview = (t) => String(t).replace(/\s+/g, ' ').slice(0, 90);
+
+  r.get('/drafts', (req, res) => {
+    const where = ['l.deleted_at = \'\''];
+    const params = [];
+    const status = ['ready', 'sent', 'discarded', 'all'].includes(req.query.status) ? req.query.status : 'ready';
+    if (status !== 'all') { where.push('d.status = ?'); params.push(status); }
+    if (req.query.lead) { where.push('d.lead_id = ?'); params.push(Number(req.query.lead)); }
+    if (req.query.owner === 'me') { where.push('l.owner_id = ?'); params.push(req.user.id); }
+    else if (/^\d+$/.test(req.query.owner || '')) { where.push('l.owner_id = ?'); params.push(Number(req.query.owner)); }
+    if (Object.hasOwn(DRAFT_CHANNELS, req.query.channel || '')) { where.push('d.channel = ?'); params.push(req.query.channel); }
+    const limit = Math.min(Math.max(Number(req.query.limit) || 300, 1), 500);
+    const rows = db.prepare(`${DRAFT_SELECT} WHERE ${where.join(' AND ')} ORDER BY ${status === 'ready' ? 'd.created_at ASC' : 'COALESCE(NULLIF(d.sent_at, \'\'), d.created_at) DESC'}, d.id LIMIT ?`).all(...params, limit);
+    res.json({ rows, send_window: DRAFT_SEND_WINDOW, channels: DRAFT_CHANNELS });
+  });
+  r.get('/drafts/count', (req, res) => {
+    const own = /^\d+$/.test(req.query.owner || '') ? ' AND l.owner_id = ' + Number(req.query.owner) : '';
+    const n = db.prepare(`SELECT COUNT(*) AS n FROM drafts d JOIN leads l ON l.id = d.lead_id WHERE d.status = 'ready' AND l.deleted_at = ''${own}`).get().n;
+    res.json({ ready: n });
+  });
+  r.patch('/drafts/:did', (req, res) => {
+    const d = db.prepare('SELECT * FROM drafts WHERE id = ?').get(Number(req.params.did));
+    if (!d) throw new HttpError(404, 'Draft not found');
+    if (d.status !== 'ready') throw new HttpError(400, 'Only a draft that is still waiting can be edited');
+    const input = req.body || {};
+    const f = cleanDraft(input, { partial: true });
+    checkConnectNote(f.channel || d.channel, f.body ?? d.body);
+    const now = new Date().toISOString();
+    // Editing the text removes the approval: the person who approves must see the final wording.
+    if (('body' in f && f.body !== d.body) || ('subject' in f && f.subject !== d.subject) || ('channel' in f && f.channel !== d.channel)) { f.approved_by = null; f.approved_at = ''; }
+    if (input.approved === true) { f.approved_by = req.user.id; f.approved_at = now; }
+    if (input.approved === false) { f.approved_by = null; f.approved_at = ''; }
+    f.updated_at = now;
+    const cols = Object.keys(f);
+    db.prepare(`UPDATE drafts SET ${cols.map((c) => c + ' = ?').join(', ')} WHERE id = ?`).run(...cols.map((c) => f[c]), d.id);
+    res.json({ draft: draftOne(d.id) });
+  });
+  r.delete('/drafts/:did', (req, res) => {
+    const d = db.prepare('SELECT * FROM drafts WHERE id = ?').get(Number(req.params.did));
+    if (!d) throw new HttpError(404, 'Draft not found');
+    if (d.status !== 'ready') throw new HttpError(400, 'Only a draft that is still waiting can be discarded');
+    db.prepare("UPDATE drafts SET status = 'discarded', updated_at = ? WHERE id = ?").run(new Date().toISOString(), d.id);
+    res.json({ ok: true });
+  });
+
   r.get('/:id', (req, res) => {
     const lead = db.prepare('SELECT l.*, u.name AS owner_name, d.name AS deleted_by_name FROM leads l LEFT JOIN users u ON u.id = l.owner_id LEFT JOIN users d ON d.id = l.deleted_by WHERE l.id = ?').get(Number(req.params.id));
     if (!lead) throw new HttpError(404, 'Lead not found');
@@ -464,7 +535,8 @@ export function leadsRoutes(db) {
     ).all(lead.id);
     const links = db.prepare('SELECT id, kind, label, url, created_at FROM lead_links WHERE lead_id = ? ORDER BY id').all(lead.id);
     const fit = fitOf(lead);
-    res.json({ lead, fit, guide: guideOf(lead, { fit, counts: countsFor(db, lead.id), today: todayLocal(), rules: getRules(db), meetings }), activities, meetings, links });
+    const drafts = db.prepare(`${DRAFT_SELECT} WHERE d.lead_id = ? AND d.status != 'discarded' ORDER BY d.id DESC LIMIT 20`).all(lead.id);
+    res.json({ lead, fit, guide: guideOf(lead, { fit, counts: countsFor(db, lead.id), today: todayLocal(), rules: getRules(db), meetings }), activities, meetings, links, drafts });
   });
 
   // One lead for that chat: everything the CRM knows, the suggested next step and a place for your own findings.
@@ -626,6 +698,42 @@ export function leadsRoutes(db) {
       }
     });
     res.json({ lead: fresh() });
+  });
+
+
+  // Add a draft to a lead (a person or an AI agent with an API key). Creating a draft never sends anything.
+  r.post('/:id/drafts', (req, res) => {
+    const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(Number(req.params.id));
+    if (!lead) throw new HttpError(404, 'Lead not found');
+    if (lead.deleted_at) throw new HttpError(400, 'This lead is in the recycle bin. Restore it first.');
+    const f = cleanDraft(req.body || {}, { partial: false });
+    checkConnectNote(f.channel, f.body);
+    const dup = db.prepare("SELECT id FROM drafts WHERE lead_id = ? AND channel = ? AND body = ? AND status = 'ready'").get(lead.id, f.channel, f.body);
+    if (dup) return res.json({ draft: draftOne(dup.id), duplicate: true });
+    const now = new Date().toISOString();
+    const id = tx(db, () => {
+      const ins = db.prepare('INSERT INTO drafts(lead_id, channel, subject, body, note, send_window, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
+        .run(lead.id, f.channel, f.subject || '', f.body, f.note || '', f.send_window || DRAFT_SEND_WINDOW, 'ready', req.user.id, now, now);
+      logActivity(db, { lead_id: lead.id, user_id: req.user.id, type: 'note', note: `Draft ready (${DRAFT_CHANNELS[f.channel]}), NOT sent: ${preview(f.body)}` });
+      return Number(ins.lastInsertRowid);
+    });
+    res.status(201).json({ draft: draftOne(id) });
+  });
+
+  // The person sent it: log the real activity (with the text) and close the draft.
+  r.post('/drafts/:did/sent', (req, res) => {
+    const d = db.prepare('SELECT * FROM drafts WHERE id = ?').get(Number(req.params.did));
+    if (!d) throw new HttpError(404, 'Draft not found');
+    if (d.status !== 'ready') throw new HttpError(400, 'This draft is already ' + d.status);
+    const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(d.lead_id);
+    if (!lead || lead.deleted_at) throw new HttpError(400, 'This lead is in the recycle bin. Restore it first.');
+    const text = d.channel === 'email' && d.subject ? `Subject: ${d.subject}\n\n${d.body}` : d.body;
+    tx(db, () => {
+      db.prepare("UPDATE drafts SET status = 'sent', sent_by = ?, sent_at = ?, updated_at = ? WHERE id = ?").run(req.user.id, new Date().toISOString(), new Date().toISOString(), d.id);
+      recordActivity(lead, d.channel, text.slice(0, 2000), req.user);
+      if (['linkedin_dm', 'linkedin_inmail', 'email'].includes(d.channel)) db.prepare('UPDATE leads SET step_done = ? WHERE id = ?').run(todayLocal(), lead.id);
+    });
+    res.json({ draft: draftOne(d.id) });
   });
 
   r.post('/:id/activities', (req, res) => {
