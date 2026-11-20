@@ -139,7 +139,7 @@ export const SIZE_RULE = { big_over: 100, training_center_over: 20 };
 
 // ── Draft queue ──────────────────────────────────────────────────────────────
 // Drafts are written any time of day (Bangladesh working hours) and SENT by a person in the USA morning.
-// 8 to 11 AM Eastern (EST, winter) is 7 to 10 PM in Dhaka.
+// 6 AM Eastern (EST, winter) is 5 PM in Dhaka. Comments and DMs go out from 5 PM Dhaka time. Likes, follows and connection requests can be done at any time.
 export const DRAFT_CHANNELS = {
   linkedin_dm: 'LinkedIn message',
   linkedin_inmail: 'LinkedIn InMail',
@@ -147,5 +147,5 @@ export const DRAFT_CHANNELS = {
   linkedin_connect: 'Connection note',
   email: 'Email',
 };
-export const DRAFT_SEND_WINDOW = 'USA Eastern morning, 8 to 11 AM ET (7 to 10 PM in Dhaka)';
+export const DRAFT_SEND_WINDOW = 'from 5 PM Bangladesh time (6 AM ET) onward, USA morning';
 export const DRAFT_LIMITS = { body: 4000, connect_note: 300, subject: 200, note: 1000 };

@@ -39,10 +39,18 @@ A company with 101 to 200 employees that trains its **own** staff (does not sell
 
 ## Drafts: write all day, send in the USA morning
 - Write every message, comment, email and connection note as a **draft** in the CRM (lead panel, or the API/AI agent). The CRM never sends anything.
-- Drafts are written during Bangladesh working hours. They are **sent by a person in the USA Eastern morning, 8 to 11 AM ET (7 to 10 PM in Dhaka)**, after the draft is read and approved.
+- Drafts are written during Bangladesh working hours. Comments and DMs are **sent by a person from 5 PM Bangladesh time (6 AM ET) onward**, after the draft is read and approved. Likes, follows, profile views and connection requests (with an approved note) can be done at any time.
 - Leads > **Draft ready** shows everything waiting. Copy the text, send it yourself on LinkedIn or email, then press **Mark sent**. That logs the activity and closes the draft.
 - Before a DM draft: read the real LinkedIn thread and confirm the person is a 1st-degree connection. If not, draft a connection note (300 characters or fewer) instead.
 - AI agents: add drafts only (never send, never log as sent). Use the Shiblu voice: short lines, one curious question, no pitch on a first touch.
+
+## Comment-first pipeline
+1. **Comment or reply** (on the lead's post, or reply to someone who commented on ours; check notifications). 1 or 2 lines, one specific detail or one easy question. No pitch, no link, no name, no company, no signature. Quality over volume.
+2. **Research** the profile and give a verdict. Check every skillBNK path: training platform buyer, AI Automation, AI Content/Video, Software Development, partner, tech investor.
+3. **Follow and like** a recent post (4 weeks or less). No approval needed.
+4. **Connection request** only for PURSUE or QUALIFY, with a note of 300 characters or fewer, approved first. Never a second request while one is pending.
+5. **First DM** after accept (confirm 1st degree): curious question, no pitch, no meeting ask.
+6. **Meeting ask** after they say something specific. Tue, Wed or Thu after 3 PM Michigan time.
 
 ## Meetings
 - Never in a first message. Only after the lead replied with something specific about their training, or invited a call.
