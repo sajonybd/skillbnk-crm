@@ -49,7 +49,7 @@ A company with 101 to 200 employees that trains its **own** staff (does not sell
 1. **Comment or reply** (on the lead's post, or reply to someone who commented on ours; check notifications). 1 or 2 lines, one specific detail or one easy question. No pitch, no link, no name, no company, no signature. Quality over volume.
 2. **Research** the profile and give a verdict. Check every skillBNK path: training platform buyer, AI Automation, AI Content/Video, Software Development, partner, tech investor.
 3. **Follow and like** a recent post (4 weeks or less). No approval needed.
-4. **Connection request** only for PURSUE or QUALIFY, with a note of 300 characters or fewer, approved first. Never a second request while one is pending.
+4. **Connection request** only for PURSUE or QUALIFY, with a note of 300 characters or fewer, approved first. Write it as a founder building a relationship, not selling: "Hi Name, I'm Shiblu, a founder based in Warren, Michigan. I saw [one real detail of their work]. I enjoy learning from people [doing that]. Glad to connect." No question, no skillBNK or training-technology mention, no offer. Never a second request while one is pending.
 5. **First DM** after accept (confirm 1st degree): curious question, no pitch, no meeting ask.
 6. **Meeting ask** after they say something specific. Tue, Wed or Thu after 3 PM Michigan time.
 

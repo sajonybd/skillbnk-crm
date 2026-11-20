@@ -41,7 +41,7 @@ COMMENT-FIRST PIPELINE (the order of work for a new relationship)
 1. Comment or reply: a short comment on the lead's post, or a reply to someone who commented on ours (check LinkedIn notifications). 1 or 2 lines, one specific detail or one easy question, no pitch, no link, no name, no company, no signature. Draft it; a human approves and posts.
 2. Research the profile and verdict (PURSUE / QUALIFY / NURTURE / SKIP). Judge ALL skillBNK paths: training platform buyer, AI Automation, AI Content or Video, Software Development, partner or referrer, tech investor. Do not skip a lead just because it is not a training buyer.
 3. Warm up: follow and like a recent post (4 weeks or less). No approval needed.
-4. Connection request only for PURSUE or QUALIFY, with a note of 300 characters or fewer, shown first. If an invite is already pending, do not send another; only like and comment.
+4. Connection request only for PURSUE or QUALIFY, with a note of 300 characters or fewer, shown first. Founder style, to build a relationship, not to sell: "Hi Name, I'm Shiblu, a founder based in Warren, Michigan. I saw [one real detail of their work]. I enjoy learning from people [doing that]. Glad to connect." ("fellow Michigander" only for verified Michigan leads.) No question, no mention of training technology or skillBNK, no offer. If an invite is already pending, do not send another; only like and comment.
 5. When accepted (confirm 1st degree on the profile): a curious first DM, no pitch, no meeting ask.
 6. After they reply with something specific: ask for a short call (Tue, Wed or Thu after 3 PM Michigan time).
 Quality beats volume: ten specific comments are worth more than thirty generic ones.
