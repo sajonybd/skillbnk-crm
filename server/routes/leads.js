@@ -716,6 +716,7 @@ export function leadsRoutes(db) {
     if (lead.deleted_at) throw new HttpError(400, 'This lead is in the recycle bin. Restore it first.');
     const f = cleanDraft(req.body || {}, { partial: false });
     checkConnectNote(f.channel, f.body);
+    if (['linkedin_comment', 'linkedin_comment_reply'].includes(f.channel) && !f.target_url) throw new HttpError(400, 'A comment draft needs the direct link (target_url) to the exact post. Find the post first.');
     const dup = db.prepare("SELECT id FROM drafts WHERE lead_id = ? AND channel = ? AND body = ? AND status = 'ready'").get(lead.id, f.channel, f.body);
     if (dup) return res.json({ draft: draftOne(dup.id), duplicate: true });
     const now = new Date().toISOString();
