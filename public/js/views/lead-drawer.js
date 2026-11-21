@@ -1,8 +1,8 @@
 import { api } from '../api.js';
-import { h, options, pill, fullName, fmtDateTime, timeAgo, toast, avatar, copyText, asUrl, todayStr } from '../util.js';
+import { h, fill, options, pill, fullName, fmtDateTime, timeAgo, toast, avatar, copyText, asUrl, todayStr } from '../util.js';
 import { watchVisit } from '../visit.js';
 import { icon, TYPE_ICON } from '../icons.js';
-import { draftCard } from './drafts.js';
+import { draftCard, newDraftForm } from './drafts.js';
 
 // Editable contact fields: [key, label, full width?]
 const DETAIL_FIELDS = [
@@ -92,7 +92,7 @@ export async function openLead(id, ctx, onChange = () => {}) {
     const admin = ctx.user.role === 'admin';
     const facts = [['Email', l.email], ['Phone', l.phone], ['Title', l.title], ['Company', l.company], ['Owner when deleted', l.owner_name], ['Stage', l.stage], ['Lead type', l.quality], ['Source', l.source]]
       .filter(([, v]) => v);
-    drawer.replaceChildren(
+    fill(drawer,
       h('div', { class: 'drawer-head' },
         avatar(fullName(l), 44),
         h('div', { style: 'flex:1;min-width:0' },
@@ -289,7 +289,7 @@ export async function openLead(id, ctx, onChange = () => {}) {
     } : null);
     const linkRow = linksEl(l, links, { onLogged: () => { changed = true; load(); } });
 
-    drawer.replaceChildren(
+    fill(drawer,
       h('div', { class: 'drawer-head' },
         avatar(fullName(l), 44),
         h('div', { style: 'flex:1;min-width:0' },
@@ -321,7 +321,8 @@ export async function openLead(id, ctx, onChange = () => {}) {
           field('Owner', owner), field('Stage', stage),
           field('Lead type', quality), field('', h('span')),
           field('Next action', nextAction), field('Next action date', nextDate))),
-      drafts.some((d) => d.status === 'ready') || drafts.length ? h('section', null, h('h3', null, 'Drafts (not sent)'), drafts.map((d) => draftCard(d, { onChange: () => { changed = true; load(); }, ctx }))) : null,
+      h('section', null, h('h3', null, 'Drafts (not sent)'), drafts.map((d) => draftCard(d, { onChange: () => { changed = true; load(); }, ctx })),
+        newDraftForm(l, { onSaved: () => { changed = true; load(); } })),
       outreachSection,
       meetingsSection(l, meetings),
       linksSection(l, links),

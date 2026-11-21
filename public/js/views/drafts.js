@@ -3,7 +3,7 @@ import { h, fill, toast, copyText, timeAgo } from '../util.js';
 import { icon } from '../icons.js';
 import { openLead } from './lead-drawer.js';
 
-const CH = { linkedin_dm: 'LinkedIn message', linkedin_inmail: 'InMail', linkedin_comment: 'Comment', linkedin_connect: 'Connection note', email: 'Email' };
+const CH = { linkedin_dm: 'LinkedIn message', linkedin_inmail: 'InMail', linkedin_comment: 'Comment', linkedin_connect: 'Connection note', linkedin_comment_reply: 'Comment reply', linkedin_followup: 'Follow-up / reply message', email: 'Email' };
 
 // One draft card. Used by the Draft ready tab and the lead panel. The CRM never sends: a person sends, then presses Mark sent.
 export function draftCard(d, { onChange = () => {}, showLead = false, ctx } = {}) {
@@ -44,4 +44,33 @@ export async function renderDrafts(el, ctx, { owner = '', onChange = () => {} } 
   fill(el,
     h('div', { class: 'muted', style: 'margin-bottom:10px' }, 'Send window: ' + r.send_window + '. Oldest first.'),
     r.rows.length ? r.rows.map((d) => draftCard(d, { onChange, showLead: true, ctx })) : h('div', { class: 'empty' }, 'No drafts waiting.'));
+}
+
+
+// "Add draft" form for the lead panel. Saves a ready draft (never sends). Comments and comment replies need the direct post link.
+export function newDraftForm(lead, { onSaved = () => {} } = {}) {
+  const channel = h('select', null, Object.entries(CH).map(([v, label]) => h('option', { value: v }, label)));
+  const subject = h('input', { placeholder: 'Subject (email only)', style: 'display:none' });
+  const target = h('input', { placeholder: 'Direct link to the exact post (needed for comments)', style: 'display:none' });
+  const body = h('textarea', { rows: 5, placeholder: 'Write the draft here. It is saved as ready, not sent.' });
+  const note = h('input', { placeholder: 'Note (optional)' });
+  const sync = () => {
+    subject.style.display = channel.value === 'email' ? '' : 'none';
+    const needsLink = ['linkedin_comment', 'linkedin_comment_reply'].includes(channel.value);
+    target.style.display = needsLink || channel.value === 'linkedin_dm' ? '' : 'none';
+    target.placeholder = needsLink ? 'Direct link to the exact post (needed)' : 'Message thread link (optional)';
+  };
+  channel.addEventListener('change', sync);
+  const save = h('button', { class: 'btn small primary', onclick: async () => {
+    if (!body.value.trim()) { toast('Write the draft first', true); return; }
+    try {
+      await api('POST', `/api/leads/${lead.id}/drafts`, { channel: channel.value, subject: subject.value.trim(), body: body.value.trim(), note: note.value.trim(), target_url: target.value.trim() });
+      toast('Draft saved (not sent)');
+      onSaved();
+    } catch (e) { toast(e.message, true); }
+  } }, icon('plus', 14), 'Save draft');
+  const box = h('details', { class: 'card', style: 'padding:10px;margin-top:6px' },
+    h('summary', { style: 'cursor:pointer;font-weight:600' }, 'Add draft'),
+    h('div', { style: 'display:grid;gap:8px;margin-top:8px' }, channel, subject, target, body, note, h('div', { class: 'row' }, save)));
+  return box;
 }
