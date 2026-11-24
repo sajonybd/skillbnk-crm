@@ -127,6 +127,9 @@ export const TARGET_METRICS = {
   linkedin_inmail: 'InMails', email: 'Emails',
 };
 
+// Comment replies are still counted when done (activity log, reports), but they are not a target, so the Targets pages and the plan do not list them.
+export const VISIBLE_TARGET_METRICS = Object.fromEntries(Object.entries(TARGET_METRICS).filter(([k]) => k !== 'linkedin_comment_reply'));
+
 // ── Outreach funnel (playbook Sections 40–42) ───────────────────────────────
 export const LEAD_CATEGORIES = ['Customer', 'Curious', 'Strategic Partner'];
 export const TIERS = ['A', 'B', 'C'];

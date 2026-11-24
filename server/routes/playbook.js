@@ -6,7 +6,7 @@ import { HttpError } from '../db.js';
 import { requireAdmin } from '../auth.js';
 import { RULE_DEFS, DEFAULT_RULES, getRules, saveRules, capFor } from '../lib/rules.js';
 import { getDefaultTargets, BUILTIN_TARGETS } from '../lib/seed-ops.js';
-import { TARGET_METRICS } from '../config.js';
+import { TARGET_METRICS, VISIBLE_TARGET_METRICS } from '../config.js';
 import { DEFAULT_PLAYBOOK } from '../data/playbook-default.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -32,7 +32,7 @@ export function playbookRoutes(db) {
       caps: users.map((u) => ({ user_id: u.id, name: u.name, cap: capFor(db, u.id, rules), custom: setting('cap:' + u.id) !== undefined })),
       markdown: setting('playbook_md') || DEFAULT_PLAYBOOK, customized: setting('playbook_md') !== undefined, ...meta,
       targets: {
-        metrics: TARGET_METRICS, defaults: getDefaultTargets(db), builtin: BUILTIN_TARGETS,
+        metrics: VISIBLE_TARGET_METRICS, defaults: getDefaultTargets(db), builtin: BUILTIN_TARGETS,
         members: users.map((u) => ({ user_id: u.id, name: u.name, targets: Object.fromEntries(db.prepare('SELECT metric, daily_target FROM member_targets WHERE user_id = ?').all(u.id).map((t) => [t.metric, t.daily_target])) })),
       },
       requests: reqs, open_requests: db.prepare("SELECT COUNT(*) AS n FROM plan_requests WHERE status = 'open'").get().n,

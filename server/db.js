@@ -216,6 +216,18 @@ export function openDb(file) {
   // 24 Nov 2026: InMail and Email get a daily target of 10. Comment replies depend on other people commenting, so they are no longer a target (still counted when done).
   for (const m of ['linkedin_inmail', 'email']) db.prepare("INSERT OR IGNORE INTO member_targets(user_id, metric, daily_target) SELECT id, ?, 10 FROM users WHERE active = 1 AND role = 'member'").run(m);
   db.prepare("UPDATE member_targets SET daily_target = 0 WHERE metric = 'linkedin_comment_reply' AND daily_target = 10").run();
+  // 24 Nov 2026 (later): InMail daily target 5 and Email daily target 15. Only numbers still at the old 10 are moved; a number someone set by hand stays.
+  db.prepare("UPDATE member_targets SET daily_target = 5 WHERE metric = 'linkedin_inmail' AND daily_target = 10").run();
+  db.prepare("UPDATE member_targets SET daily_target = 15 WHERE metric = 'email' AND daily_target = 10").run();
+  try {
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'default_targets'").get();
+    const v = row ? JSON.parse(row.value) : null;
+    if (v && typeof v === 'object') {
+      if (v.linkedin_inmail === 10) v.linkedin_inmail = 5;
+      if (v.email === 10) v.email = 15;
+      db.prepare("UPDATE settings SET value = ? WHERE key = 'default_targets'").run(JSON.stringify(v));
+    }
+  } catch { /* leave the stored defaults as they are */ }
   // Removed team members keep their history but disappear from the app.
   const ucols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   if (!ucols.includes('removed_at')) db.exec("ALTER TABLE users ADD COLUMN removed_at TEXT NOT NULL DEFAULT ''");

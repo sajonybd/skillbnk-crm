@@ -67,7 +67,7 @@ export async function render(root, ctx) {
           step('Messages (DM)', p.messages, p.messagedLeads + ' leads'), step('InMails', p.inmails),
           step('Emails', p.emails, p.emailedLeads + ' leads'), step('Replies', p.replies, 'Reply ' + rate(p.replies, p.messagedLeads)),
           step('Meetings booked', p.meetingsBooked), step('Comments', p.comments), step('Likes', p.likes), step('Follows', p.follows),
-          step('Website research', p.websiteResearch, 'leads'), step('Comment replies', p.commentReplies), step('Follow-up messages', p.followups)),
+          step('Website research', p.websiteResearch, 'leads'), step('Follow-up messages', p.followups)),
         h('h3', { style: 'margin-top:16px' }, 'Right now' + (state.user ? ' (leads owned by the selected person)' : ' (all leads)')),
         h('div', { class: 'metrics' },
           step('Invites pending', pd.total, `${pd.upTo7} up to 7 days · ${pd.d8to14} 8–14 days · ${pd.over14} over 14 days`),

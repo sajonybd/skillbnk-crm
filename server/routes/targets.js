@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { TARGET_METRICS, TZ_OFFSET_MIN } from '../config.js';
+import { TARGET_METRICS, VISIBLE_TARGET_METRICS, TZ_OFFSET_MIN } from '../config.js';
 import { HttpError } from '../db.js';
 import { requireAdmin } from '../auth.js';
 import { applyDefaultTargets } from '../lib/seed-ops.js';
@@ -16,7 +16,7 @@ export function targetsRoutes(db) {
   r.get('/', (req, res) => {
     const date = DATE_RE.test(req.query.date || '') ? req.query.date : todayLocal();
     const from = addDays(date, -6);
-    const metrics = Object.keys(TARGET_METRICS);
+    const metrics = Object.keys(VISIBLE_TARGET_METRICS);
     const tgt = db.prepare('SELECT user_id, metric, daily_target FROM member_targets WHERE daily_target > 0').all();
     const counts = db.prepare(
       `SELECT a.user_id, date(a.created_at, '${shift}') AS day, a.type, COUNT(*) AS n FROM activities a
@@ -45,13 +45,13 @@ export function targetsRoutes(db) {
       const sumD = tracked.reduce((s, x) => s + Math.min(x.done, x.target), 0);
       out.push({ user_id: u.id, name: u.name, rows, overall: sumT ? Math.round((sumD / sumT) * 100) : null, days });
     }
-    res.json({ date, working_day: isWorkingDay(date), metrics: TARGET_METRICS, members: out });
+    res.json({ date, working_day: isWorkingDay(date), metrics: VISIBLE_TARGET_METRICS, members: out });
   });
 
   // Admin: raw targets for editing.
   r.get('/edit', requireAdmin, (_req, res) => {
     res.json({
-      metrics: TARGET_METRICS,
+      metrics: VISIBLE_TARGET_METRICS,
       users: db.prepare("SELECT id, name FROM users WHERE active = 1 AND removed_at = '' AND role != 'admin' ORDER BY name").all(),
       targets: db.prepare('SELECT user_id, metric, daily_target FROM member_targets').all(),
     });

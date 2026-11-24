@@ -669,7 +669,7 @@ test('new targets: website research needs a finding, is not a touch, and members
   assert.equal(det.lead.stage, 'New', 'research alone does not make the lead Contacted');
   assert.equal((await call('POST', `/api/leads/${id}/activities`, { type: 'linkedin_followup', note: 'Thanks for the reply' })).status, 201);
   const t = await call('GET', '/api/targets');
-  assert.ok(t.metrics.website_research && t.metrics.linkedin_comment_reply && t.metrics.linkedin_followup);
+  assert.ok(t.metrics.website_research && t.metrics.linkedin_followup);
 });
 
 test('CEO review: submit, approve gate, changes, replied, Contact Us evidence, outcomes', async () => {
@@ -772,6 +772,19 @@ test('draft gate toggle: admin only; when off, members can send without CEO appr
   assert.equal((await call('POST', `/api/leads/${lead}/ceo-submit`, { note: 'optional review' }, ck)).status, 200, 'CEO review still available');
   assert.equal((await call('PUT', '/api/playbook/gate', { on: true })).draft_gate, true);
   assert.equal((await call('POST', `/api/leads/drafts/${d2.id}/sent`, {}, ck)).status, 400, 'blocked again when switched back on');
+});
+
+test('targets: comment replies are not listed; InMail default 5 and Email default 15', async () => {
+  const lead = (await call('POST', '/api/leads', { first_name: 'Cora', last_name: 'Reply', company: 'ReplyCo', email: 'cora@replyco.test' })).id;
+  assert.equal((await call('POST', `/api/leads/${lead}/activities`, { type: 'linkedin_comment_reply', note: 'Thanks, agreed.' })).status, 201, 'still counted when done');
+  const t = await call('GET', '/api/targets');
+  assert.equal(Object.hasOwn(t.metrics, 'linkedin_comment_reply'), false);
+  assert.ok(t.members.every((m) => m.rows.every((r) => r.metric !== 'linkedin_comment_reply')));
+  const pb = await call('GET', '/api/playbook');
+  assert.equal(Object.hasOwn(pb.targets.metrics, 'linkedin_comment_reply'), false);
+  assert.equal(pb.targets.defaults.linkedin_inmail, 5);
+  assert.equal(pb.targets.defaults.email, 15);
+  assert.equal(Object.hasOwn(pb.targets.defaults, 'linkedin_comment_reply'), true, 'defaults keep it at 0 so nothing else breaks');
 });
 
 test('ai-result: one call saves verdict, links and drafts; nothing is sent; bad input is rejected', async () => {
