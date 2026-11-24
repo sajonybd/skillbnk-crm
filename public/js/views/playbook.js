@@ -68,7 +68,16 @@ export async function render(root, ctx) {
         toast('Rules saved. The Plan uses them now.'); reload();
       } catch (e) { toast(e.message, true); }
     } }, 'Save rules') : null;
+    const gateBox = h('input', { type: 'checkbox', checked: data.draft_gate !== false });
+    gateBox.disabled = !isAdmin;
+    gateBox.onchange = async () => {
+      try { await api('PUT', '/api/playbook/gate', { on: gateBox.checked }); toast(gateBox.checked ? 'CEO approval is required before sending' : 'CEO review is a suggestion only. Drafts can be sent now.'); reload(); }
+      catch (e) { gateBox.checked = !gateBox.checked; toast(e.message, true); }
+    };
+    const gateCard = h('div', { class: 'card pcard', style: 'max-width:820px;margin-bottom:14px' }, h('div', { class: 'pc-title' }, h('h3', null, 'CEO approval before sending')),
+      h('label', { class: 'rule', style: 'cursor:pointer' }, h('div', null, h('b', null, 'Require CEO approval to mark outreach drafts sent'), h('div', { class: 'sub' }, 'On: LinkedIn DM, InMail, email and website-contact drafts wait for the CEO. Off: the CEO can still review and comment, but nothing is blocked.' + (isAdmin ? '' : ' Only the admin can change this.'))), gateBox));
     body.replaceChildren(
+      gateCard,
       h('div', { class: 'card pcard', style: 'max-width:820px' }, h('div', { class: 'pc-title' }, h('h3', null, 'Follow-up cadence and limits')), ...rows),
       h('div', { class: 'card pcard', style: 'max-width:820px;margin-top:14px' }, h('div', { class: 'pc-title' }, h('h3', null, 'Daily lead actions per person')), ...capRows,
         h('div', { class: 'muted', style: 'margin-top:8px' }, 'Daily targets (comments, likes, DMs…) are on the Targets page. Team tasks are on the Tasks page.')),

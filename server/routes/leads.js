@@ -196,7 +196,7 @@ export function leadsRoutes(db) {
 
   // Counts per working stage (for the tabs above the table), for one owner or everyone.
   r.get('/work-counts', (req, res) => {
-    const o = req.query.owner;
+    const o = req.query.owner === 'me' ? String(req.user.id) : req.query.owner; // the extension asks for "me"
     const cond = o === 'none' ? 'AND l.owner_id IS NULL' : o ? 'AND l.owner_id = ?' : '';
     const rows = db.prepare(`SELECT ${WORK_CASE} AS k, COUNT(*) AS n FROM leads l WHERE l.deleted_at = '' ${cond} GROUP BY 1`).all(...(o && o !== 'none' ? [Number(o)] : []));
     const out = Object.fromEntries(rows.map((x) => [x.k, x.n]));

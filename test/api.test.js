@@ -755,6 +755,25 @@ test('per-lead CEO approval unlocks every step; booking and contact links are de
   assert.equal((await call('GET', '/api/leads/ceo-queue')).rows.some((r) => r.id === lead), false);
 });
 
+test('draft gate toggle: admin only; when off, members can send without CEO approval; CEO review stays available', async () => {
+  await call('POST', '/api/team', { name: 'Gate Member', email: 'gate@skillbnk.local', password: 'secret1' });
+  const res = await fetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'gate@skillbnk.local', password: 'secret1' }) });
+  const ck = res.headers.get('set-cookie').split(';')[0];
+  assert.equal((await call('GET', '/api/playbook')).draft_gate, true, 'on by default');
+  assert.equal((await call('PUT', '/api/playbook/gate', { on: false }, ck)).status, 403, 'members cannot change it');
+  assert.equal((await call('PUT', '/api/playbook/gate', { on: 'off' })).status, 400, 'needs a boolean');
+  const lead = (await call('POST', '/api/leads', { first_name: 'Gil', last_name: 'Gate', company: 'GateCo', email: 'gil@gateco.test' })).id;
+  const d1 = (await call('POST', `/api/leads/${lead}/drafts`, { channel: 'linkedin_dm', body: 'Gated DM text' }, ck)).draft;
+  assert.equal((await call('POST', `/api/leads/drafts/${d1.id}/sent`, {}, ck)).status, 400, 'blocked while the gate is on');
+  assert.equal((await call('PUT', '/api/playbook/gate', { on: false })).draft_gate, false);
+  assert.equal((await call('GET', '/api/playbook', undefined, ck)).draft_gate, false);
+  assert.equal((await call('POST', `/api/leads/drafts/${d1.id}/sent`, {}, ck)).draft.status, 'sent', 'sends without approval when off');
+  const d2 = (await call('POST', `/api/leads/${lead}/drafts`, { channel: 'linkedin_dm', body: 'Another DM text' }, ck)).draft;
+  assert.equal((await call('POST', `/api/leads/${lead}/ceo-submit`, { note: 'optional review' }, ck)).status, 200, 'CEO review still available');
+  assert.equal((await call('PUT', '/api/playbook/gate', { on: true })).draft_gate, true);
+  assert.equal((await call('POST', `/api/leads/drafts/${d2.id}/sent`, {}, ck)).status, 400, 'blocked again when switched back on');
+});
+
 test('ai-result: one call saves verdict, links and drafts; nothing is sent; bad input is rejected', async () => {
   const lead = (await call('POST', '/api/leads', { first_name: 'Ana', last_name: 'Result', company: 'ResultCo', email: 'ana@resultco.test' })).id;
   assert.equal((await call('POST', `/api/leads/${lead}/ai-result`, { verdict: 'MAYBE' })).status, 400);

@@ -97,7 +97,7 @@ $('load').onclick = async () => {
       $('count').textContent = `${acts.length} leads due (${p.members?.[0]?.summary?.carry_over || 0} more carried over)`;
       drawQueue(); return;
     }
-    const q = new URLSearchParams({ limit: '100', sort: 'updated_at' });
+    const q = new URLSearchParams({ limit: '100', sort: 'work', dir: 'asc' }); // same order as the CRM's "Work order"
     if (cfg.work === 'changed') q.set('needs_review', '1'); else q.set('work', cfg.work);
     if (cfg.owner === 'me') q.set('owner', 'me');
     const r = await crm('GET', '/api/leads?' + q);
@@ -110,10 +110,21 @@ $('load').onclick = async () => {
       return true;
     };
     const due = r.rows.filter(keep); leads = due.slice(0, 20);
-    $('count').textContent = `${r.total} in this list. ${due.length} need work now, showing ${leads.length}.` + (notDue || doneToday ? ` Hidden: ${notDue} not due yet, ${doneToday} already researched today.` : '');
+    const wl = $('work').selectedOptions[0]?.textContent.replace(/\s*\(\d+\)$/, '') || cfg.work;
+    $('count').textContent = `${wl} · ${cfg.owner === 'me' ? 'my leads' : 'everyone'}: ${r.total} in the CRM list. ${due.length} need work now, showing ${leads.length}.` + (notDue || doneToday ? ` Hidden: ${notDue} not due yet, ${doneToday} already researched today (untick the setting to see them).` : '');
+    refreshCounts();
     drawQueue();
   } catch (e) { log(e.message, 'err'); }
 };
+// Put the CRM's own counts on the list names, so the extension and the CRM tabs can be compared number for number.
+async function refreshCounts() {
+  try {
+    const q = new URLSearchParams(); if (cfg.owner === 'me') q.set('owner', 'me');
+    const c = await crm('GET', '/api/leads/work-counts?' + q);
+    for (const o of $('work').options) { const base = o.textContent.replace(/\s*\(\d+\)$/, ''); const n = c[o.value]; o.textContent = n === undefined ? base : `${base} (${n})`; }
+  } catch { /* counts are only a help */ }
+}
+
 function drawQueue() {
   $('queue').replaceChildren(
     leads.length ? el('div', { class: 'row' }, el('button', { class: 'primary', id: 'runall', onclick: async () => { if (await allSites()) runBatch(); } }, `Research all ${leads.length} in order`), el('button', { onclick: () => { stop = true; log('Stopping after this lead'); } }, 'Stop')) : null,

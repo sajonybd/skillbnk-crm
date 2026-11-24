@@ -110,7 +110,7 @@ async function checkMail(lead) {
   const tabId = await openBg('https://privateemail.com/spm/mail/Virtual~2FAll/?search=' + encodeURIComponent(q) /* All Mail: inbox, sent and archive */);
   const m = await runIn(tabId, pageReadMailSearch);
   if (!m || m.signin) return { text: 'EMAIL: not checked (webmail sign-in needed).', ok: false, signin: true };
-  if (!m.rows.length) return { text: `EMAIL: no messages found for "${q}".`, ok: true };
+  if (!m.rows.length) return { text: `EMAIL: no messages found for "${q}".`, ok: true, note: 'no messages found' };
   // In All Mail the folder tag tells the direction: a row in Sent is ours (its title is the RECIPIENT). Anything else (Inbox, Archive...) came from them, unless the sender is us.
   const own = /shiblu|skillbnk/i;
   const ours = (r) => /sent|outbox|draft/i.test(r.folder || '') || own.test(r.from);

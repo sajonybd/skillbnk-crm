@@ -28,7 +28,7 @@ export function playbookRoutes(db) {
       `SELECT q.*, u.name AS user_name FROM plan_requests q JOIN users u ON u.id = q.user_id ${isAdmin ? '' : 'WHERE q.user_id = ?'} ORDER BY (q.status = 'open') DESC, q.id DESC LIMIT 100`
     ).all(...(isAdmin ? [] : [req.user.id]));
     res.json({
-      rules, defaults: DEFAULT_RULES, defs: RULE_DEFS,
+      rules, defaults: DEFAULT_RULES, defs: RULE_DEFS, draft_gate: setting('draft_gate') !== 'off',
       caps: users.map((u) => ({ user_id: u.id, name: u.name, cap: capFor(db, u.id, rules), custom: setting('cap:' + u.id) !== undefined })),
       markdown: setting('playbook_md') || DEFAULT_PLAYBOOK, customized: setting('playbook_md') !== undefined, ...meta,
       targets: {
@@ -51,6 +51,15 @@ export function playbookRoutes(db) {
       for (const [m, v] of Object.entries(row || {})) if (Object.hasOwn(TARGET_METRICS, m)) up.run(Number(uid), m, clamp(v));
     }
     res.json({ ok: true });
+  });
+
+  // Admin: CEO approval gate on outreach drafts. On (default): staff cannot mark a gated draft sent until the CEO approves the lead.
+  // Off: the CEO review is only a suggestion and does not block sending.
+  r.put('/gate', requireAdmin, (req, res) => {
+    const on = req.body?.on;
+    if (typeof on !== 'boolean') throw new HttpError(400, 'Send on: true or false');
+    put('draft_gate', on ? 'on' : 'off');
+    res.json({ ok: true, draft_gate: on });
   });
 
   r.put('/rules', requireAdmin, (req, res) => {

@@ -40,14 +40,25 @@ async function ask(prompt, timeoutMs = 420000) {
   box.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
   await sleep(700);
   if ((box.innerText || box.value || '').trim().length < Math.min(40, prompt.length)) document.execCommand('insertText', false, prompt);
-  const send = await waitFor(sendBtn, 8000);
-  await sleep(300 + Math.random() * 500); // a short human-like pause
-  if (send) send.click(); else pressEnter(box); // no button found: send with the Enter key, like typing it
-  let started = await waitFor(() => assistantMsgs().length > before || stopBtn() || jsonBlocks().length > blocksBefore || (document.querySelector('main')?.innerText || '').length > lenBefore + 400, 8000);
-  if (!started) { // the click did nothing: try the other way once
-    if (send) pressEnter(box); else { const b = sendBtn(); if (b) b.click(); }
-    started = await waitFor(() => assistantMsgs().length > before || stopBtn() || jsonBlocks().length > blocksBefore || (document.querySelector('main')?.innerText || '').length > lenBefore + 400, 60000);
+  // Sending: the long prompt in the box also makes the page text grow, so that cannot tell us the send worked.
+  // "Sent" = the box emptied, or the Stop button appeared, or a new answer block appeared.
+  const boxLen = () => (box.innerText || box.value || '').trim().length;
+  const sent = () => stopBtn() || assistantMsgs().length > before || jsonBlocks().length > blocksBefore || boxLen() < 5;
+  const realClick = (el) => { for (const t of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window })); };
+  await sleep(600 + Math.random() * 500); // a short human-like pause, lets the page enable the Send button
+  let started = false;
+  for (let attempt = 1; attempt <= 6 && !started; attempt++) {
+    if (boxLen() < 5 && !stopBtn()) { // the text was lost: paste again
+      box.focus(); document.execCommand('insertText', false, prompt); await sleep(700);
+    }
+    const send = await waitFor(sendBtn, 5000); // look the button up again each time, the page replaces it
+    if (attempt % 3 === 1) { if (send) send.click(); else pressEnter(box); }
+    else if (attempt % 3 === 2) { if (send) realClick(send); else pressEnter(box); }
+    else { box.focus(); pressEnter(box); }
+    if (attempt > 1) progress(`Sending the prompt to ChatGPT, try ${attempt}…`);
+    started = !!(await waitFor(sent, 7000));
   }
+  if (started) started = !!(await waitFor(() => assistantMsgs().length > before || stopBtn() || jsonBlocks().length > blocksBefore, 60000));
   if (!started) return { ok: false, error: 'The prompt was pasted but ChatGPT did not start answering. Press the send arrow yourself, then run this lead again.' };
   const end = Date.now() + timeoutMs;
   let last = ''; let stable = 0; const t0 = Date.now();
