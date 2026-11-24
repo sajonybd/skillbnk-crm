@@ -16,7 +16,7 @@ function pageReadProfile() {
   const m = /(?:^|[\s·•])(1st|2nd|3rd)\b/.exec(top.slice(0, 900));
   return { degree: m ? m[1] : '', pending: /\bPending\b/.test(top.slice(0, 900)), top: top.slice(0, 1400) };
 }
-async function pageReadThread(name) {
+async function pageReadThread(name, slug) {
   const sleepp = (ms) => new Promise((r) => setTimeout(r, ms));
   if (/\/(login|uas\/login|checkpoint|authwall)/i.test(location.href)) return { signin: true };
   await sleepp(2000);
@@ -29,7 +29,10 @@ async function pageReadThread(name) {
   first.click(); await sleepp(2500);
   const list = document.querySelector('.msg-s-message-list, [class*="msg-s-message-list-content"], .msg-s-message-list-container');
   if (!list) return { error: 'thread did not open' };
-  return { text: list.innerText.replace(/\n{2,}/g, '\n').slice(-3500) };
+  // Two people can share a name: confirm the open thread links to this lead's profile.
+  const pageSlugs = [...document.querySelectorAll('a[href*="/in/"]')].map((a) => ((/\/in\/([^/?#]+)/.exec(a.href) || [])[1] || '').toLowerCase()).filter(Boolean);
+  const verified = slug ? (pageSlugs.length ? pageSlugs.includes(slug) : null) : null;
+  return { text: list.innerText.replace(/\n{2,}/g, '\n').slice(-3500), verified };
 }
 async function pageReadMailSearch() {
   if (/\/login/i.test(location.href)) return { signin: true };
@@ -70,8 +73,8 @@ async function checkLinkedIn(lead) {
   await humanPause(4000, 10000);
   tabId = await openBg('https://www.linkedin.com/messaging/');
   const name = `${lead.first_name} ${lead.last_name}`.trim();
-  const t = await runIn(tabId, pageReadThread, [name]); await chrome.tabs.remove(tabId).catch(() => {});
-  if (t?.text) out += `\nLINKEDIN CONVERSATION (latest part):\n${t.text}`;
+  const t = await runIn(tabId, pageReadThread, [name, s]); await chrome.tabs.remove(tabId).catch(() => {});
+  if (t?.text) out += `\nLINKEDIN CONVERSATION (latest part)${t.verified === true ? ', matched to this profile' : t.verified === false ? ', WARNING: the open thread does not link to this lead\'s profile, it may be a different person with the same name. Do not rely on it' : ', name matched only (could not confirm the profile)'}:\n${t.text}`;
   else out += `\nLINKEDIN CONVERSATION: not read (${t?.signin ? 'sign-in needed' : t?.none ? 'no thread found' : t?.error || 'unknown'}). A person must open the inbox before anything is sent.`;
   return { text: out, ok: true, degree: p.degree, thread: !!t?.text };
 }
