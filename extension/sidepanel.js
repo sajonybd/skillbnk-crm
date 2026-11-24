@@ -305,7 +305,7 @@ function card(lead, data, r) {
     el('div', { class: 'row' }, el('b', {}, `${lead.first_name} ${lead.last_name}`), verdict, !data ? el('span', { class: 'chip SKIP' }, 'No JSON block found') : null),
     data ? el('div', {}, 'Reason', reason, 'Assessment line', assessment, 'Why in pipeline', why, el('div', { class: 'row' }, 'Next action', next, 'in days', days), el('div', { class: 'row' }, 'Lead type', qualitySel, 'Category', categorySel, 'Channel', channelSel),
       links ? el('div', {}, el('div', { class: 'muted' }, 'Links to add'), el('pre', {}, links)) : null,
-      ...drafts.map((z) => el('div', { class: 'card' }, el('span', { class: 'chip' }, z.x.channel), z.x.channel === 'email' ? z.subject : null, z.body, ['linkedin_comment', 'linkedin_comment_reply', 'website_contact'].includes(z.x.channel) ? z.target : null,
+      ...drafts.map((z) => el('div', { class: 'card' }, el('span', { class: 'chip' }, z.x.channel), z.x.channel === 'email' ? z.subject : null, z.body, ['linkedin_comment', 'linkedin_comment_reply', 'linkedin_like', 'website_contact'].includes(z.x.channel) ? z.target : null,
         z.x.channel === 'linkedin_connect' ? el('div', { class: 'muted' }, 'Connection note limit: 300 characters') : null)),
       d.needs_human ? el('div', { class: 'muted' }, 'Check by hand: ' + d.needs_human) : null, el('div', { class: 'row' }, saveBtn, skipBtn)) : el('div', { class: 'row' }, reaskBtn, skipBtn),
     out, el('details', {}, el('summary', {}, 'Full ChatGPT answer'), el('pre', { style: 'white-space:pre-wrap' }, r.text || '')));
@@ -320,8 +320,8 @@ function quickLinks(lead, drafts) {
   for (const d of drafts) {
     const buttons = [el('button', { onclick: () => { navigator.clipboard.writeText((d.channel === 'email' && d.subject ? 'Subject: ' + d.subject + '\n\n' : '') + d.body); log('Draft copied', 'ok'); } }, 'Copy text')];
     if (d.channel === 'email' && lead.email) buttons.push(el('a', { class: 'btn', target: '_blank', href: `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(lead.email)}&su=${encodeURIComponent(d.subject || '')}&body=${encodeURIComponent(d.body)}` }, 'Open Gmail draft'));
-    if (['linkedin_connect', 'linkedin_dm', 'linkedin_followup', 'linkedin_inmail'].includes(d.channel) && lead.linkedin) buttons.push(el('a', { class: 'btn', target: '_blank', href: li(lead.linkedin) }, 'Open profile'));
-    if (d.target_url) buttons.push(el('a', { class: 'btn', target: '_blank', href: d.target_url }, d.channel === 'website_contact' ? 'Open the form' : 'Open the post'));
+    if (['linkedin_connect', 'linkedin_dm', 'linkedin_followup', 'linkedin_inmail', 'linkedin_comment_reply'].includes(d.channel) && lead.linkedin) buttons.push(el('a', { class: 'btn', target: '_blank', href: li(lead.linkedin) }, 'Open profile'));
+    if (d.target_url) buttons.push(el('a', { class: 'btn', target: '_blank', href: d.target_url }, d.channel === 'website_contact' ? 'Open the form' : d.channel === 'linkedin_like' ? 'Open the post to like' : 'Open the post'));
     if (d.id) buttons.push(el('button', { class: 'primary', title: 'Press only after you really sent it', onclick: async (ev) => { if (!confirm('Did you really send this? This logs it as sent in the CRM.')) return; let evidence = ''; if (d.channel === 'website_contact') { evidence = prompt('Paste the confirmation the website showed:') || ''; if (evidence.trim().length < 5) return; } try { await crm('POST', `/api/leads/drafts/${d.id}/sent`, { evidence }); ev.target.disabled = true; ev.target.textContent = 'Logged as sent'; log('Logged as sent', 'ok'); refreshTargets(); } catch (e) { log(e.message, 'err'); } } }, 'Mark sent'));
     rows.push(el('div', { class: 'row' }, el('span', { class: 'chip' }, d.channel), ...buttons));
   }

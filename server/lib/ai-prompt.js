@@ -107,13 +107,14 @@ After your F line, end the answer with ONE code block tagged json and nothing af
   "lead_category": "${LEAD_CATEGORIES.join(' | ')}",
   "channel": "${CHANNELS.join(' | ')}",
   "links": [{"kind": "booking | contact | other", "url": "https://...", "label": ""}],
-  "drafts": [{"channel": "linkedin_connect | linkedin_dm | linkedin_comment | linkedin_followup | email | website_contact", "subject": "email only", "body": "the exact text, Shiblu voice", "target_url": "needed for comments and Contact Us forms", "note": ""}],
+  "drafts": [{"channel": "linkedin_connect | linkedin_dm | linkedin_inmail | linkedin_comment | linkedin_comment_reply | linkedin_like | linkedin_followup | email | website_contact", "subject": "email only", "body": "the exact text, Shiblu voice", "target_url": "needed for comments and Contact Us forms", "note": ""}],
   "research_summary": "5 to 8 short lines a person or AI can read later instead of redoing the research: what they do, headcount, platform, buyer, location, history with us",
   "checked": ["website", "linkedin", "inbox", "email"],
   "needs_human": "which inbox or page a person must still check"
 }
 \`\`\`
-Rules: a connection note is 300 characters or fewer. A comment draft needs the direct post link. A Contact Us draft needs the form page link. Write drafts only when sending is the right next step.
+Rules: a connection note is 300 characters or fewer. A comment, comment reply or like draft needs the direct post link in target_url (a like draft's body is one line such as "Like this post: <what it is about>"). A Contact Us draft needs the form page link. An InMail draft only if they are NOT connected and the lead's InMail is not disabled.
+Drafts are the point of this research: whenever your next_action is something we send or post (email, InMail, DM, follow-up, comment, reply, like, form), write that draft in the same answer so a person can send it today. Leave drafts empty ONLY when a person must first verify something (say what in needs_human), or when the rules say do nothing yet (say why in reason). More than one draft is fine, for example a comment now and an email later; give each its own channel and a short note saying when to send it.
 === END MACHINE BLOCK ===`;
 
 // Setup text. The admin's saved Playbook text wins when it looks like the full rulebook; otherwise the built-in v8 copy is used.

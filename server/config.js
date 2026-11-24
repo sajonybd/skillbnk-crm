@@ -156,6 +156,7 @@ export const DRAFT_CHANNELS = {
   linkedin_comment: 'LinkedIn comment',
   linkedin_connect: 'Connection note',
   linkedin_comment_reply: 'Comment reply',
+  linkedin_like: 'Like a recent post',
   linkedin_followup: 'Follow-up / reply message',
   email: 'Email',
   website_contact: 'Website Contact Us form',
