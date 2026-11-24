@@ -806,3 +806,12 @@ test('research memory: summary and checked dates are saved, shown in the next pr
   await call('POST', `/api/leads/${lead}/ai-result`, { verdict: 'QUALIFY', reason: 'Re-checked', checked: ['inbox'] });
   assert.equal((await call('GET', `/api/leads/${lead}`)).lead.needs_review, '');
 });
+
+test('ai-result returns the saved drafts with their ids (the extension uses them for Mark sent)', async () => {
+  const lead = (await call('POST', '/api/leads', { first_name: 'Sam', last_name: 'Saved', company: 'SavedCo', email: 'sam@savedco.test' })).id;
+  const out = await call('POST', `/api/leads/${lead}/ai-result`, { verdict: 'NURTURE', reason: 'later', drafts: [{ channel: 'linkedin_connect', body: 'x'.repeat(301) }, { channel: 'linkedin_dm', body: 'Hi Sam, quick question.' }] });
+  assert.equal(out.saved.length, 1);
+  assert.equal(out.saved[0].channel, 'linkedin_dm');
+  assert.ok(out.saved[0].id > 0);
+  assert.equal(out.saved[0].body, 'Hi Sam, quick question.');
+});

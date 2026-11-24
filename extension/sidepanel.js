@@ -7,7 +7,15 @@ let cfg = { crm: 'https://skillbnk-crm.onrender.com', token: '', project: '', wo
 let leads = []; let busy = false; let stop = false; const findings = {}; // lead id -> text the person added
 const deepInfo = {}; // lead id -> { checked: [...], links: [...] } from the automatic check
 
-const log = (m, cls = '') => { const d = el('div', { class: cls }, `${new Date().toLocaleTimeString()} ${m}`); $('log').prepend(d); };
+let batchInfo = '';
+const setStatus = (m) => { const s = $('status'); if (!m) { s.style.display = 'none'; return; } s.style.display = ''; s.textContent = (batchInfo ? batchInfo + ' · ' : '') + m; };
+async function refreshTargets() {
+  try {
+    const p = await crm('GET', '/api/plan?assignee=me'); const t = p.members?.[0]?.targets || [];
+    $('targets').replaceChildren(el('b', {}, 'Today: '), ...(t.length ? t.map((x) => el('span', { style: 'margin-right:8px;white-space:nowrap' + (x.done >= x.target ? ';color:#0a7a2f' : '') }, `${x.label} ${x.done}/${x.target}`)) : ['no targets set']));
+  } catch { /* not important */ }
+}
+const log = (m, cls = '') => { const d = el('div', { class: cls }, `${new Date().toLocaleTimeString()} ${m}`); $('log').prepend(d); if (!cls) setStatus(m); };
 async function crm(method, path, body) {
   const res = await fetch(cfg.crm.replace(/\/$/, '') + path, { method, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + cfg.token }, body: body ? JSON.stringify(body) : undefined });
   const j = await res.json().catch(() => ({}));
@@ -19,7 +27,7 @@ async function loadCfg() {
   const s = await chrome.storage.local.get('cfg'); cfg = { ...cfg, ...(s.cfg || {}) };
   for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) $(k).value = cfg[k];
   $('deep').checked = cfg.deep !== false;
-  if (!cfg.token || !cfg.project) $('settings').open = true;
+  if (!cfg.token || !cfg.project) $('settings').open = true; else refreshTargets();
 }
 $('save').onclick = async () => { for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) cfg[k] = $(k).value.trim(); cfg.deep = $('deep').checked; await chrome.storage.local.set({ cfg }); log('Settings saved', 'ok'); };
 $('master').onclick = async () => { try { const s = await crm('GET', '/api/leads/ai-setup'); await navigator.clipboard.writeText(s.prompt); log(`Master prompt copied (${s.chars.toLocaleString()} characters). Paste it into the ChatGPT project's instructions, or save it as a .txt file and upload it to the project files.`, 'ok'); } catch (e) { log(e.message, 'err'); } };
@@ -38,7 +46,8 @@ function drawQueue() {
   $('queue').replaceChildren(
     leads.length ? el('div', { class: 'row' }, el('button', { class: 'primary', id: 'runall', onclick: async () => { if (await allSites()) runBatch(); } }, `Research all ${leads.length} in order`), el('button', { onclick: () => { stop = true; log('Stopping after this lead'); } }, 'Stop')) : null,
     ...leads.map((l) => el('div', { class: 'card', id: 'lead' + l.id }, el('b', {}, `${l.first_name} ${l.last_name}`.trim() || l.company), ' ', el('span', { class: 'muted' }, [l.title, l.company].filter(Boolean).join(' · ')),
-      el('div', { class: 'row' }, el('button', { onclick: async () => { if (await allSites()) researchOne(l); } }, 'Research this lead'), el('button', { onclick: async () => { if (await allSites()) deepOnly(l); } }, 'Check only'), el('button', { onclick: () => scanTab('web', l) }, 'Scan open website'), el('button', { onclick: () => scanTab('li', l) }, 'Read open LinkedIn page'), el('span', { class: 'muted', id: 'f' + l.id }, findings[l.id] ? 'findings added' : '')))));
+      el('div', { class: 'muted' }, [l.stage, l.outreach_status && 'status ' + l.outreach_status, l.next_action && 'Next: ' + l.next_action + (l.next_action_date ? ' (' + l.next_action_date + ')' : ''), l.needs_review && 'NEW: ' + l.needs_review].filter(Boolean).join(' · ')),
+      el('div', { class: 'row' }, el('button', { onclick: async () => { if (await allSites()) researchOne(l); } }, 'Research this lead'), el('button', { onclick: async () => { if (await allSites()) deepOnly(l); } }, 'Check only'), el('button', { onclick: () => { document.getElementById('lead' + l.id)?.remove(); log(`Skipped ${l.first_name} ${l.last_name} (nothing saved)`); } }, 'Skip'), el('button', { onclick: () => scanTab('web', l) }, 'Scan open website'), el('button', { onclick: () => scanTab('li', l) }, 'Read open LinkedIn page'), el('span', { class: 'muted', id: 'f' + l.id }, findings[l.id] ? 'findings added' : '')))));
 }
 
 async function allSites() {
@@ -137,6 +146,7 @@ function card(lead, data, r) {
   const drafts = (d.drafts || []).map((x) => ({ x, body: tx(x.body, 4), subject: el('input', { value: x.subject || '' }), target: el('input', { value: x.target_url || '', placeholder: 'link (comments and Contact Us)' }) }));
   const links = (d.links || []).map((k) => `${k.kind || 'other'}: ${k.url}`).join('\n');
   const out = el('div');
+  const skipBtn = el('button', { onclick: () => { document.getElementById('lead' + lead.id)?.remove(); $('work-area').replaceChildren(); log(`Skipped ${lead.first_name} ${lead.last_name} (nothing saved)`); } }, 'Skip, do not save');
   const saveBtn = el('button', { class: 'primary', onclick: async () => {
     saveBtn.disabled = true;
     try {
@@ -145,8 +155,12 @@ function card(lead, data, r) {
       const res = await crm('POST', `/api/leads/${lead.id}/ai-result`, body);
       if (r.url && /\/c\//.test(r.url)) { try { await crm('POST', `/api/leads/${lead.id}/links`, { url: r.url, kind: 'chatgpt', label: 'ChatGPT research' }); } catch { /* already added */ } }
       log(`Saved ${lead.first_name} ${lead.last_name}: ${res.verdict}, ${res.drafts} drafts, ${res.links} links${res.skipped.length ? ', skipped: ' + res.skipped.join('; ') : ''}`, 'ok');
-      out.replaceChildren(el('div', { class: 'ok' }, `Saved to the CRM (${res.drafts} drafts, ${res.links} links). Nothing was sent.`), ...quickLinks(lead, body.drafts), el('div', { class: 'muted' }, d.needs_human ? 'Check by hand: ' + d.needs_human : ''));
-      saveBtn.remove(); document.getElementById('lead' + lead.id)?.remove();
+      const saved = res.saved || [];
+      out.replaceChildren(el('div', { class: 'ok' }, `Saved to the CRM (${res.drafts} drafts, ${res.links} links). Nothing was sent.`), ...quickLinks(lead, saved),
+        ['PURSUE', 'QUALIFY'].includes(res.verdict) ? el('div', { class: 'row' }, el('button', { onclick: async (ev) => { try { await crm('POST', `/api/leads/${lead.id}/ceo-submit`, { note: body.reason }); ev.target.disabled = true; ev.target.textContent = 'Sent to CEO'; log(`${lead.first_name} ${lead.last_name} sent to the CEO`, 'ok'); } catch (e) { log(e.message, 'err'); } } }, 'Send lead to CEO')) : null,
+        el('div', { class: 'muted' }, d.needs_human ? 'Check by hand: ' + d.needs_human : ''));
+      refreshTargets();
+      saveBtn.remove(); skipBtn.remove(); document.getElementById('lead' + lead.id)?.remove();
     } catch (e) { saveBtn.disabled = false; log(e.message, 'err'); out.replaceChildren(el('div', { class: 'err' }, e.message)); }
   } }, 'Save to CRM');
   return el('div', { class: 'card' },
@@ -155,7 +169,7 @@ function card(lead, data, r) {
       links ? el('div', {}, el('div', { class: 'muted' }, 'Links to add'), el('pre', {}, links)) : null,
       ...drafts.map((z) => el('div', { class: 'card' }, el('span', { class: 'chip' }, z.x.channel), z.x.channel === 'email' ? z.subject : null, z.body, ['linkedin_comment', 'linkedin_comment_reply', 'website_contact'].includes(z.x.channel) ? z.target : null,
         z.x.channel === 'linkedin_connect' ? el('div', { class: 'muted' }, 'Connection note limit: 300 characters') : null)),
-      d.needs_human ? el('div', { class: 'muted' }, 'Check by hand: ' + d.needs_human) : null, el('div', { class: 'row' }, saveBtn)) : null,
+      d.needs_human ? el('div', { class: 'muted' }, 'Check by hand: ' + d.needs_human) : null, el('div', { class: 'row' }, saveBtn, skipBtn)) : el('div', { class: 'row' }, skipBtn),
     out, el('details', {}, el('summary', {}, 'Full ChatGPT answer'), el('pre', { style: 'white-space:pre-wrap' }, r.text || '')));
 }
 
@@ -168,6 +182,7 @@ function quickLinks(lead, drafts) {
     if (d.channel === 'email' && lead.email) buttons.push(el('a', { class: 'btn', target: '_blank', href: `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(lead.email)}&su=${encodeURIComponent(d.subject || '')}&body=${encodeURIComponent(d.body)}` }, 'Open Gmail draft'));
     if (['linkedin_connect', 'linkedin_dm', 'linkedin_followup', 'linkedin_inmail'].includes(d.channel) && lead.linkedin) buttons.push(el('a', { class: 'btn', target: '_blank', href: li(lead.linkedin) }, 'Open profile'));
     if (d.target_url) buttons.push(el('a', { class: 'btn', target: '_blank', href: d.target_url }, d.channel === 'website_contact' ? 'Open the form' : 'Open the post'));
+    if (d.id) buttons.push(el('button', { class: 'primary', title: 'Press only after you really sent it', onclick: async (ev) => { if (!confirm('Did you really send this? This logs it as sent in the CRM.')) return; let evidence = ''; if (d.channel === 'website_contact') { evidence = prompt('Paste the confirmation the website showed:') || ''; if (evidence.trim().length < 5) return; } try { await crm('POST', `/api/leads/drafts/${d.id}/sent`, { evidence }); ev.target.disabled = true; ev.target.textContent = 'Logged as sent'; log('Logged as sent', 'ok'); refreshTargets(); } catch (e) { log(e.message, 'err'); } } }, 'Mark sent'));
     rows.push(el('div', { class: 'row' }, el('span', { class: 'chip' }, d.channel), ...buttons));
   }
   return rows;
@@ -175,8 +190,10 @@ function quickLinks(lead, drafts) {
 
 async function runBatch() {
   stop = false;
+  const total = leads.length; let i = 0;
   for (const l of [...leads]) {
     if (stop) break;
+    batchInfo = `Lead ${++i} of ${total}`;
     const ok = await researchOne(l);
     if (!ok) break; // stop at the first problem so a person looks at it
     // wait for the person to save or skip this lead before moving on
@@ -184,6 +201,6 @@ async function runBatch() {
     if (stop) break;
     log(`Waiting ${cfg.pause}s before the next lead`); await sleep(Math.max(5, Number(cfg.pause) || 30) * 1000 + Math.random() * 8000);
   }
-  log('Batch finished or stopped');
+  batchInfo = ''; setStatus(''); log('Batch finished or stopped');
 }
 loadCfg();

@@ -61,7 +61,9 @@ async function checkWebsite(lead) {
   const tools = uniq(links.filter((x) => hostOf(x.h) !== host && LMS_HINT.test(hostOf(x.h)))).slice(0, 8);
   const emails = [...new Set(pages.flatMap((p) => p.emails))].slice(0, 6);
   const fmt = (xs) => (xs.length ? xs.map((x) => `${x.t || '-'} ${x.h}`).join('\n  ') : 'none seen');
-  return { ok: true, book, contact, text: `WEBSITE (${pages.length} pages read: ${pages.map((p) => p.url).join(', ')}):\nBooking links:\n  ${fmt(book)}\nContact page links:\n  ${fmt(contact)}\nPlatform / payment / form links seen (read where each Enroll, Buy, Login and Book button goes):\n  ${fmt(tools)}\nEmails seen: ${emails.join(', ') || 'none'}\n${pages.map((p) => `--- ${p.url}\n${p.text.slice(0, 1600)}`).join('\n')}` };
+  const toolNames = [...new Set(tools.map((x) => hostOf(x.h)))].slice(0, 5).join(', ') || 'none';
+  const note = `Auto read of ${pages.length} page${pages.length === 1 ? '' : 's'} on ${host}. Booking links: ${book.length}. Contact page: ${contact.length}. Platform/payment links: ${toolNames}. Emails seen: ${emails.length}.`;
+  return { ok: true, book, contact, note, text: `WEBSITE (${pages.length} pages read: ${pages.map((p) => p.url).join(', ')}):\nBooking links:\n  ${fmt(book)}\nContact page links:\n  ${fmt(contact)}\nPlatform / payment / form links seen (read where each Enroll, Buy, Login and Book button goes):\n  ${fmt(tools)}\nEmails seen: ${emails.join(', ') || 'none'}\n${pages.map((p) => `--- ${p.url}\n${p.text.slice(0, 1600)}`).join('\n')}` };
 }
 
 async function checkLinkedIn(lead) {
@@ -69,14 +71,14 @@ async function checkLinkedIn(lead) {
   let tabId = await openBg(`https://www.linkedin.com/in/${s}/`); const p = await runIn(tabId, pageReadProfile); await chrome.tabs.remove(tabId).catch(() => {});
   if (!p || p.signin) return { text: 'LINKEDIN: not checked (sign-in needed).', ok: false, signin: true };
   let out = `LINKEDIN PROFILE: connection ${p.degree || 'unknown'}${p.pending ? ', invite pending' : ''}.\n${p.top}`;
-  if (p.degree !== '1st') return { text: out + '\nMessages: not connected, so no conversation to read.', ok: true, degree: p.degree };
+  if (p.degree !== '1st') return { text: out + '\nMessages: not connected, so no conversation to read.', ok: true, degree: p.degree, note: `connection ${p.degree || 'unknown'}` };
   await humanPause(4000, 10000);
   tabId = await openBg('https://www.linkedin.com/messaging/');
   const name = `${lead.first_name} ${lead.last_name}`.trim();
   const t = await runIn(tabId, pageReadThread, [name, s]); await chrome.tabs.remove(tabId).catch(() => {});
   if (t?.text) out += `\nLINKEDIN CONVERSATION (latest part)${t.verified === true ? ', matched to this profile' : t.verified === false ? ', WARNING: the open thread does not link to this lead\'s profile, it may be a different person with the same name. Do not rely on it' : ', name matched only (could not confirm the profile)'}:\n${t.text}`;
   else out += `\nLINKEDIN CONVERSATION: not read (${t?.signin ? 'sign-in needed' : t?.none ? 'no thread found' : t?.error || 'unknown'}). A person must open the inbox before anything is sent.`;
-  return { text: out, ok: true, degree: p.degree, thread: !!t?.text };
+  return { text: out, ok: true, degree: p.degree, thread: !!t?.text, note: `connection ${p.degree}, thread ${t?.text ? 'read' : 'not read'}` };
 }
 
 async function checkMail(lead) {
@@ -88,7 +90,7 @@ async function checkMail(lead) {
   if (!m.rows.length) return { text: `EMAIL: no messages found for "${q}".`, ok: true };
   const own = /shiblu|skillbnk/i;
   const lines = m.rows.slice(0, 8).map((r) => `- ${r.date} | ${own.test(r.from) ? 'WE WROTE' : 'THEY WROTE'} (${r.from.slice(0, 28)}) | ${r.subject.slice(0, 80)}`);
-  return { text: `EMAIL HISTORY for "${q}" (${m.rows.length} found, newest first; open the thread yourself for full text):\n${lines.join('\n')}`, ok: true };
+  return { note: `${m.rows.length} messages`, text: `EMAIL HISTORY for "${q}" (${m.rows.length} found, newest first; open the thread yourself for full text):\n${lines.join('\n')}`, ok: true };
 }
 
 // Runs all four checks one after another with human pauses. Returns { text, checked: [...] } to put into the prompt.
@@ -99,5 +101,17 @@ async function deepCheck(lead, say = log) {
   const l = await step('checking the LinkedIn profile', 'linkedin', checkLinkedIn);
   const m = await step('searching webmail', 'email', checkMail);
   if (l.thread) checked.push('inbox');
+  await logWork(lead, { w, l, m });
   return { text: `AUTO CHECK by the extension on ${today10()} (read-only):\n` + parts.join('\n\n'), checked, website: w, linkedin: l, mail: m };
+}
+
+// Count the real work in the CRM so it shows in today's targets and the lead's history. The server keeps a profile visit to one per day.
+async function logWork(lead, { w, l, m }) {
+  try {
+    if (l.ok) await crm('POST', `/api/leads/${lead.id}/visit`, { kind: 'person' });
+    if (w.ok && w.note) await crm('POST', `/api/leads/${lead.id}/activities`, { type: 'website_research', note: w.note });
+    const bits = [`website ${w.ok ? 'read' : 'not read'}`, `LinkedIn ${l.ok ? l.note : 'not read'}`, `webmail ${m.ok ? m.note : 'not read'}`];
+    await crm('POST', `/api/leads/${lead.id}/activities`, { type: 'note', note: `Auto check by the extension: ${bits.join('; ')}` });
+  } catch (e) { log('Could not log the check in the CRM: ' + e.message, 'err'); }
+  refreshTargets();
 }

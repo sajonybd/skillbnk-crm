@@ -887,7 +887,7 @@ export function leadsRoutes(db) {
     const days = Number(b.next_action_days);
     if (Number.isFinite(days) && days >= 0 && days <= 60) sets.next_action_date = addDays(todayLocal(), Math.round(days));
     if (verdict === 'SKIP' && clip(b.denial_reason, 300)) sets.denial_reason = clip(b.denial_reason, 300);
-    const added = { links: 0, drafts: 0, duplicates: 0, skipped: [] };
+    const added = { links: 0, drafts: 0, duplicates: 0, skipped: [], saved: [] };
     const now = new Date().toISOString();
     // Memory for the next person or AI: a short summary and when each source was last checked. A re-check clears "needs review".
     if (clip(b.research_summary, 1500)) { sets.research_summary = clip(b.research_summary, 1500); sets.research_at = now; }
@@ -910,7 +910,7 @@ export function leadsRoutes(db) {
       }
     });
     for (const d of Array.isArray(b.drafts) ? b.drafts.slice(0, 6) : []) {
-      try { const out = addDraft(lead, d, req.user); if (out.duplicate) added.duplicates++; else added.drafts++; } catch (e) { added.skipped.push('draft: ' + e.message); }
+      try { const out = addDraft(lead, d, req.user); added.saved.push({ id: out.draft.id, channel: out.draft.channel, subject: out.draft.subject, body: out.draft.body, target_url: out.draft.target_url }); if (out.duplicate) added.duplicates++; else added.drafts++; } catch (e) { added.skipped.push('draft: ' + e.message); }
     }
     res.json({ ok: true, verdict, ...added, lead_id: lead.id });
   });
