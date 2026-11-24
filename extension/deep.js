@@ -71,14 +71,14 @@ async function checkLinkedIn(lead) {
   let tabId = await openBg(`https://www.linkedin.com/in/${s}/`); const p = await runIn(tabId, pageReadProfile); await chrome.tabs.remove(tabId).catch(() => {});
   if (!p || p.signin) return { text: 'LINKEDIN: not checked (sign-in needed).', ok: false, signin: true };
   let out = `LINKEDIN PROFILE: connection ${p.degree || 'unknown'}${p.pending ? ', invite pending' : ''}.\n${p.top}`;
-  if (p.degree !== '1st') return { text: out + '\nMessages: not connected, so no conversation to read.', ok: true, degree: p.degree, note: `connection ${p.degree || 'unknown'}` };
+  if (p.degree !== '1st') return { text: out + '\nMessages: not connected, so no conversation to read.', ok: true, degree: p.degree, pending: p.pending, note: `connection ${p.degree || 'unknown'}` };
   await humanPause(4000, 10000);
   tabId = await openBg('https://www.linkedin.com/messaging/');
   const name = `${lead.first_name} ${lead.last_name}`.trim();
   const t = await runIn(tabId, pageReadThread, [name, s]); await chrome.tabs.remove(tabId).catch(() => {});
   if (t?.text) out += `\nLINKEDIN CONVERSATION (latest part)${t.verified === true ? ', matched to this profile' : t.verified === false ? ', WARNING: the open thread does not link to this lead\'s profile, it may be a different person with the same name. Do not rely on it' : ', name matched only (could not confirm the profile)'}:\n${t.text}`;
   else out += `\nLINKEDIN CONVERSATION: not read (${t?.signin ? 'sign-in needed' : t?.none ? 'no thread found' : t?.error || 'unknown'}). A person must open the inbox before anything is sent.`;
-  return { text: out, ok: true, degree: p.degree, thread: !!t?.text, note: `connection ${p.degree}, thread ${t?.text ? 'read' : 'not read'}` };
+  return { text: out, ok: true, degree: p.degree, pending: p.pending, thread: !!t?.text, note: `connection ${p.degree}, thread ${t?.text ? 'read' : 'not read'}` };
 }
 
 async function checkMail(lead) {
@@ -109,6 +109,9 @@ async function deepCheck(lead, say = log) {
 async function logWork(lead, { w, l, m }) {
   try {
     if (l.ok) await crm('POST', `/api/leads/${lead.id}/visit`, { kind: 'person' });
+    // Answer "did they accept?" from the real profile and update the CRM (no stage change, nothing sent).
+    if (l.ok && lead.invite_sent_date && !lead.accepted_date && l.degree === '1st') await crm('POST', '/api/leads/signals', { items: [{ lead_id: lead.id, type: 'invite_accepted', text: 'Seen as 1st degree by the check' }] });
+    else if (l.ok && lead.invite_sent_date && !lead.accepted_date && l.pending) await crm('POST', '/api/leads/signals', { items: [{ lead_id: lead.id, type: 'invite_pending' }] });
     if (w.ok && w.note) await crm('POST', `/api/leads/${lead.id}/activities`, { type: 'website_research', note: w.note });
     const bits = [`website ${w.ok ? 'read' : 'not read'}`, `LinkedIn ${l.ok ? l.note : 'not read'}`, `webmail ${m.ok ? m.note : 'not read'}`];
     await crm('POST', `/api/leads/${lead.id}/activities`, { type: 'note', note: `Auto check by the extension: ${bits.join('; ')}` });

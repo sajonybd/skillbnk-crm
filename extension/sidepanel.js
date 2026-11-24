@@ -3,10 +3,23 @@
 const $ = (id) => document.getElementById(id);
 const el = (tag, attrs = {}, ...kids) => { const n = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'class') n.className = v; else if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else if (v !== null && v !== undefined && v !== false) n.setAttribute(k, v === true ? '' : v); } for (const c of kids.flat()) if (c !== null && c !== undefined && c !== false) n.append(c.nodeType ? c : document.createTextNode(String(c))); return n; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-let cfg = { crm: 'https://skillbnk-crm.onrender.com', token: '', project: '', work: 'research', owner: 'me', pause: 30, deep: true };
+let cfg = { crm: 'https://skillbnk-crm.onrender.com', token: '', project: '', work: 'plan', owner: 'me', pause: 30, deep: true };
 let leads = []; let busy = false; let stop = false; const findings = {}; // lead id -> text the person added
 const deepInfo = {}; // lead id -> { checked: [...], links: [...] } from the automatic check
 
+// Plain-words state and "what the extension will do" for each kind of step the CRM plan produces.
+const STATE = {
+  reply: ['REPLIED', 'green', 'Read the thread, then draft your answer.'],
+  first_message: ['ACCEPTED', 'green', 'They accepted. Check the profile and draft the first message.'],
+  followup: ['MESSAGED, NO REPLY', 'amber', 'Check the thread, then draft a follow-up with a new angle.'],
+  last_followup: ['LAST FOLLOW-UP', 'amber', 'Draft the last follow-up, then stop.'],
+  email: ['NO REPLY: EMAIL', 'amber', 'Check webmail, then draft the short email.'],
+  check_invite: ['INVITE PENDING', 'blue', 'Check if they accepted. If yes the CRM is updated, then draft the first message.'],
+  no_email: ['NO EMAIL', 'blue', 'Find the Contact Us form or a post to comment on, then draft it.'],
+  research: ['FIND A WAY IN', 'blue', 'Read the website for a booking link, form or email, then draft.'],
+  scheduled: ['PLANNED STEP', 'blue', 'Do the planned follow-up from the lead note.'],
+};
+const stateOfLead = (l) => (l.outreach_status === 'R' ? 'reply' : l.first_dm_date ? 'followup' : l.accepted_date ? 'first_message' : l.invite_sent_date ? 'check_invite' : 'research');
 let batchInfo = '';
 const setStatus = (m) => { const s = $('status'); if (!m) { s.style.display = 'none'; return; } s.style.display = ''; s.textContent = (batchInfo ? batchInfo + ' · ' : '') + m; };
 async function refreshTargets() {
@@ -34,6 +47,12 @@ $('master').onclick = async () => { try { const s = await crm('GET', '/api/leads
 
 $('load').onclick = async () => {
   try {
+    if (cfg.work === 'plan') {
+      const p = await crm('GET', '/api/plan?assignee=me'); const acts = (p.members?.[0]?.actions || []);
+      leads = acts.map((a) => { const [first, ...rest] = String(a.name || '').split(' '); return { id: a.id, first_name: first, last_name: rest.join(' '), title: a.title, company: a.company, linkedin: a.linkedin, email: a.email, plan: a }; });
+      $('count').textContent = `${acts.length} leads due (${p.members?.[0]?.summary?.carry_over || 0} more carried over)`;
+      drawQueue(); return;
+    }
     const q = new URLSearchParams({ limit: '20', sort: 'updated_at' });
     if (cfg.work === 'changed') q.set('needs_review', '1'); else q.set('work', cfg.work);
     if (cfg.owner === 'me') q.set('owner', 'me');
@@ -46,7 +65,10 @@ function drawQueue() {
   $('queue').replaceChildren(
     leads.length ? el('div', { class: 'row' }, el('button', { class: 'primary', id: 'runall', onclick: async () => { if (await allSites()) runBatch(); } }, `Research all ${leads.length} in order`), el('button', { onclick: () => { stop = true; log('Stopping after this lead'); } }, 'Stop')) : null,
     ...leads.map((l) => el('div', { class: 'card', id: 'lead' + l.id }, el('b', {}, `${l.first_name} ${l.last_name}`.trim() || l.company), ' ', el('span', { class: 'muted' }, [l.title, l.company].filter(Boolean).join(' · ')),
-      el('div', { class: 'muted' }, [l.stage, l.outreach_status && 'status ' + l.outreach_status, l.next_action && 'Next: ' + l.next_action + (l.next_action_date ? ' (' + l.next_action_date + ')' : ''), l.needs_review && 'NEW: ' + l.needs_review].filter(Boolean).join(' · ')),
+      (() => { const k = l.plan?.kind || stateOfLead(l); const [label, tone, what] = STATE[k] || STATE.scheduled; const due = l.plan ? (l.plan.late_days > 0 ? `${l.plan.late_days} days late` : 'due today') : (l.next_action_date ? 'due ' + l.next_action_date : '');
+        return el('div', {}, el('div', { class: 'row' }, el('span', { class: 'chip', style: 'font-weight:600;background:' + ({ green: '#d7f5e0', amber: '#fff1c2', blue: '#dbe8ff' }[tone]) }, label), l.plan?.pursue ? el('span', { class: 'chip PURSUE' }, 'PURSUE') : null, due ? el('span', { class: 'muted' }, due) : null),
+          el('div', {}, el('b', {}, 'Do now: '), l.plan?.action || l.next_action || (STATE[k] || [])[0]), el('div', { class: 'muted' }, 'The extension will: ' + what), l.plan?.reason ? el('div', { class: 'muted' }, 'Why: ' + l.plan.reason) : null,
+          [l.stage, l.needs_review && 'NEW: ' + l.needs_review].filter(Boolean).length ? el('div', { class: 'muted' }, [l.stage, l.needs_review && 'NEW: ' + l.needs_review].filter(Boolean).join(' · ')) : null); })(),
       el('div', { class: 'row' }, el('button', { onclick: async () => { if (await allSites()) researchOne(l); } }, 'Research this lead'), el('button', { onclick: async () => { if (await allSites()) deepOnly(l); } }, 'Check only'), el('button', { onclick: () => { document.getElementById('lead' + l.id)?.remove(); log(`Skipped ${l.first_name} ${l.last_name} (nothing saved)`); } }, 'Skip'), el('button', { onclick: () => scanTab('web', l) }, 'Scan open website'), el('button', { onclick: () => scanTab('li', l) }, 'Read open LinkedIn page'), el('span', { class: 'muted', id: 'f' + l.id }, findings[l.id] ? 'findings added' : '')))));
 }
 
@@ -58,7 +80,7 @@ async function allSites() {
 }
 async function deepOnly(lead) {
   const box = $('work-area'); box.replaceChildren(el('div', { class: 'card' }, `Checking ${lead.first_name} ${lead.last_name}…`));
-  try { const d = await deepCheck(lead); findings[lead.id] = d.text; deepInfo[lead.id] = { checked: d.checked, links: [...(d.website.book || []).map((x) => ({ kind: 'booking', url: x.h })), ...(d.website.contact || []).map((x) => ({ kind: 'contact', url: x.h }))] }; $('f' + lead.id) && ($('f' + lead.id).textContent = 'findings added'); box.replaceChildren(el('div', { class: 'card' }, el('b', {}, 'Check finished (added to the next research)'), el('pre', { style: 'white-space:pre-wrap' }, d.text))); }
+  try { if (!lead.website && !lead.hydrated) { const full = (await crm('GET', `/api/leads/${lead.id}`)).lead; Object.assign(lead, full, { hydrated: true }); } const d = await deepCheck(lead); findings[lead.id] = d.text; deepInfo[lead.id] = { checked: d.checked, links: [...(d.website.book || []).map((x) => ({ kind: 'booking', url: x.h })), ...(d.website.contact || []).map((x) => ({ kind: 'contact', url: x.h }))] }; $('f' + lead.id) && ($('f' + lead.id).textContent = 'findings added'); box.replaceChildren(el('div', { class: 'card' }, el('b', {}, 'Check finished (added to the next research)'), el('pre', { style: 'white-space:pre-wrap' }, d.text))); }
   catch (e) { box.replaceChildren(el('div', { class: 'card err' }, e.message)); }
 }
 
@@ -107,6 +129,7 @@ async function researchOne(lead) {
   busy = true; const box = $('work-area'); box.replaceChildren(el('div', { class: 'card' }, `Researching ${lead.first_name} ${lead.last_name}…`));
   try {
     if (!cfg.token || !cfg.project) throw new Error('Add the CRM API key and the ChatGPT project link in Settings first.');
+    if (!lead.website && !lead.hydrated) { const full = (await crm('GET', `/api/leads/${lead.id}`)).lead; Object.assign(lead, full, { hydrated: true }); }
     if (cfg.deep !== false && !deepInfo[lead.id]) {
       const d = await deepCheck(lead);
       findings[lead.id] = d.text + (findings[lead.id] ? '\n' + findings[lead.id] : '');
