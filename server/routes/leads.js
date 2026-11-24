@@ -1,7 +1,7 @@
 import { fitOf } from '../lib/fit.js';
 import { WORK_CASE, WORK_KEYS, WORK_GROUPS, workOrder } from '../lib/work.js';
 import { Router } from 'express';
-import { STAGES, QUALITIES, MANUAL_TYPES, FIRST_TOUCH_TYPES, COMPANY_VIEW_TYPE, MEETING_TYPES, LINK_KINDS, LEAD_CATEGORIES, TIERS, OUTREACH_STATUSES, CHANNELS, legacyPathToQuality, DRAFT_CHANNELS, DRAFT_SEND_WINDOW, DRAFT_LIMITS } from '../config.js';
+import { STAGES, QUALITIES, MANUAL_TYPES, FIRST_TOUCH_TYPES, COMPANY_VIEW_TYPE, MEETING_TYPES, LINK_KINDS, LEAD_CATEGORIES, TIERS, OUTREACH_STATUSES, CHANNELS, legacyPathToQuality, DRAFT_CHANNELS, DRAFT_SEND_WINDOW, DRAFT_LIMITS, DRAFT_REVIEW, APPROVAL_REQUIRED_CHANNELS, CEO_STATUS } from '../config.js';
 import { HttpError, logActivity, tx } from '../db.js';
 import { dedupeKey, hasIdentity, findExisting } from '../lib/leadkey.js';
 import { requireAdmin } from '../auth.js';
@@ -456,8 +456,12 @@ export function leadsRoutes(db) {
   // ── Draft queue ────────────────────────────────────────────────────────────
   // Prepared messages / comments / emails. Nothing here is ever sent by the CRM: a person sends it, then presses "Mark sent".
   const DRAFT_SELECT = `SELECT d.*, TRIM(l.first_name || ' ' || l.last_name) AS lead_name, l.company, l.title AS lead_title, l.linkedin, l.email AS lead_email,
-      l.owner_id, l.stage, l.outreach_status, l.state AS lead_state, uo.name AS owner_name, uc.name AS created_name, ua.name AS approved_name
-    FROM drafts d JOIN leads l ON l.id = d.lead_id LEFT JOIN users uo ON uo.id = l.owner_id LEFT JOIN users uc ON uc.id = d.created_by LEFT JOIN users ua ON ua.id = d.approved_by`;
+      l.owner_id, l.stage, l.outreach_status, l.ceo_status AS lead_ceo_status, l.state AS lead_state, uo.name AS owner_name, uc.name AS created_name, ua.name AS approved_name, us.name AS submitted_name, ur.name AS reviewed_name, usn.name AS sent_name
+    FROM drafts d JOIN leads l ON l.id = d.lead_id LEFT JOIN users uo ON uo.id = l.owner_id LEFT JOIN users uc ON uc.id = d.created_by LEFT JOIN users ua ON ua.id = d.approved_by
+      LEFT JOIN users us ON us.id = d.submitted_by LEFT JOIN users ur ON ur.id = d.reviewed_by LEFT JOIN users usn ON usn.id = d.sent_by`;
+  // Review history of a draft (who submitted, approved, asked for changes, sent). Never deleted.
+  const draftEvent = (draftId, user, action, note = '') => db.prepare('INSERT INTO draft_events(draft_id, user_id, action, note, created_at) VALUES (?,?,?,?,?)').run(draftId, user?.id ?? null, action, String(note || '').slice(0, 1000), new Date().toISOString());
+  const gateOn = () => (db.prepare("SELECT value FROM settings WHERE key = 'draft_gate'").get()?.value || 'on') !== 'off';
   const draftOne = (id) => db.prepare(`${DRAFT_SELECT} WHERE d.id = ?`).get(id);
   function cleanDraft(input, { partial }) {
     const out = {};
@@ -495,14 +499,23 @@ export function leadsRoutes(db) {
     if (req.query.owner === 'me') { where.push('l.owner_id = ?'); params.push(req.user.id); }
     else if (/^\d+$/.test(req.query.owner || '')) { where.push('l.owner_id = ?'); params.push(Number(req.query.owner)); }
     if (Object.hasOwn(DRAFT_CHANNELS, req.query.channel || '')) { where.push('d.channel = ?'); params.push(req.query.channel); }
+    if (Object.hasOwn(DRAFT_REVIEW, req.query.review || '')) { where.push('d.review_status = ?'); params.push(req.query.review); }
+    if (req.query.review === 'replied') where.push("d.replied_at != ''");
     const limit = Math.min(Math.max(Number(req.query.limit) || 300, 1), 500);
     const rows = db.prepare(`${DRAFT_SELECT} WHERE ${where.join(' AND ')} ORDER BY ${status === 'ready' ? 'd.created_at ASC' : 'COALESCE(NULLIF(d.sent_at, \'\'), d.created_at) DESC'}, d.id LIMIT ?`).all(...params, limit);
-    res.json({ rows, send_window: DRAFT_SEND_WINDOW, channels: DRAFT_CHANNELS });
+    res.json({ rows, send_window: DRAFT_SEND_WINDOW, channels: DRAFT_CHANNELS, review: DRAFT_REVIEW, gate: gateOn(), gated_channels: APPROVAL_REQUIRED_CHANNELS });
   });
   r.get('/drafts/count', (req, res) => {
     const own = /^\d+$/.test(req.query.owner || '') ? ' AND l.owner_id = ' + Number(req.query.owner) : '';
     const n = db.prepare(`SELECT COUNT(*) AS n FROM drafts d JOIN leads l ON l.id = d.lead_id WHERE d.status = 'ready' AND l.deleted_at = ''${own}`).get().n;
-    res.json({ ready: n });
+    const by = (rs) => db.prepare(`SELECT COUNT(*) AS n FROM drafts d JOIN leads l ON l.id = d.lead_id WHERE d.status = 'ready' AND d.review_status = ? AND l.deleted_at = ''${own}`).get(rs).n;
+    res.json({ ready: n, waiting: by('submitted'), approved: by('approved'), changes: by('changes'), leads_waiting: db.prepare("SELECT COUNT(*) AS n FROM leads WHERE deleted_at = '' AND ceo_status = 'submitted'").get().n });
+  });
+  // Plain-text list of what is waiting for the CEO, to paste into WhatsApp or email.
+  r.get('/drafts/digest', (req, res) => {
+    const rows = db.prepare(`${DRAFT_SELECT} WHERE d.status = 'ready' AND d.review_status = 'submitted' AND l.deleted_at = '' ORDER BY d.submitted_at ASC, d.id`).all();
+    const lines = rows.map((d, i) => `${i + 1}. ${d.lead_name || d.company} (${d.company || '-'}), ${DRAFT_CHANNELS[d.channel]}, by ${d.submitted_name || d.created_name || '-'}\n   ${preview(d.body)}`);
+    res.json({ count: rows.length, text: rows.length ? `Drafts waiting for your approval (${rows.length}):\n\n${lines.join('\n\n')}` : 'Nothing is waiting for approval.' });
   });
   r.patch('/drafts/:did', (req, res) => {
     const d = db.prepare('SELECT * FROM drafts WHERE id = ?').get(Number(req.params.did));
@@ -513,9 +526,17 @@ export function leadsRoutes(db) {
     checkConnectNote(f.channel || d.channel, f.body ?? d.body);
     const now = new Date().toISOString();
     // Editing the text removes the approval: the person who approves must see the final wording.
-    if (('body' in f && f.body !== d.body) || ('subject' in f && f.subject !== d.subject) || ('channel' in f && f.channel !== d.channel)) { f.approved_by = null; f.approved_at = ''; }
-    if (input.approved === true) { f.approved_by = req.user.id; f.approved_at = now; }
-    if (input.approved === false) { f.approved_by = null; f.approved_at = ''; }
+    const reworded = ('body' in f && f.body !== d.body) || ('subject' in f && f.subject !== d.subject) || ('channel' in f && f.channel !== d.channel);
+    if (reworded) {
+      f.approved_by = null; f.approved_at = '';
+      if (d.review_status !== 'draft') { f.review_status = 'draft'; draftEvent(d.id, req.user, 'edited', d.review_status === 'approved' ? 'Text changed after approval, so the approval was removed' : 'Text changed'); }
+    }
+    // The approval toggle is for admins only (the CEO). Everyone else sends the draft with Submit.
+    if (input.approved === true || input.approved === false) {
+      if (req.user.role !== 'admin') throw new HttpError(403, 'Only the CEO (an admin) can approve. Use "Send to CEO" to submit this draft.');
+      if (input.approved === true) { f.approved_by = req.user.id; f.approved_at = now; f.review_status = 'approved'; f.reviewed_by = req.user.id; f.reviewed_at = now; draftEvent(d.id, req.user, 'approved'); }
+      else { f.approved_by = null; f.approved_at = ''; f.review_status = 'draft'; draftEvent(d.id, req.user, 'approval_removed'); }
+    }
     f.updated_at = now;
     const cols = Object.keys(f);
     db.prepare(`UPDATE drafts SET ${cols.map((c) => c + ' = ?').join(', ')} WHERE id = ?`).run(...cols.map((c) => f[c]), d.id);
@@ -526,7 +547,91 @@ export function leadsRoutes(db) {
     if (!d) throw new HttpError(404, 'Draft not found');
     if (d.status !== 'ready') throw new HttpError(400, 'Only a draft that is still waiting can be discarded');
     db.prepare("UPDATE drafts SET status = 'discarded', updated_at = ? WHERE id = ?").run(new Date().toISOString(), d.id);
+    draftEvent(d.id, req.user, 'discarded');
     res.json({ ok: true });
+  });
+  // Step 1: the person finishes the draft and sends it to the CEO.
+  r.post('/drafts/:did/submit', (req, res) => {
+    const d = db.prepare('SELECT * FROM drafts WHERE id = ?').get(Number(req.params.did));
+    if (!d) throw new HttpError(404, 'Draft not found');
+    if (d.status !== 'ready') throw new HttpError(400, 'Only a draft that is still waiting can be submitted');
+    if (d.review_status === 'submitted') throw new HttpError(400, 'This draft is already waiting for the CEO');
+    if (d.review_status === 'approved') throw new HttpError(400, 'This draft is already approved');
+    const now = new Date().toISOString();
+    db.prepare("UPDATE drafts SET review_status = 'submitted', submitted_by = ?, submitted_at = ?, review_note = '', updated_at = ? WHERE id = ?").run(req.user.id, now, now, d.id);
+    draftEvent(d.id, req.user, 'submitted', String(req.body?.note || ''));
+    res.json({ draft: draftOne(d.id) });
+  });
+  // Step 2 (admin = the CEO): approve this exact text, or ask for changes with a comment.
+  r.post('/drafts/:did/review', (req, res) => {
+    if (req.user.role !== 'admin') throw new HttpError(403, 'Only the CEO (an admin) can approve or request changes');
+    const d = db.prepare('SELECT * FROM drafts WHERE id = ?').get(Number(req.params.did));
+    if (!d) throw new HttpError(404, 'Draft not found');
+    if (d.status !== 'ready') throw new HttpError(400, 'Only a draft that is still waiting can be reviewed');
+    const decision = req.body?.decision;
+    const note = String(req.body?.note || '').trim().slice(0, DRAFT_LIMITS.note);
+    if (!['approve', 'changes'].includes(decision)) throw new HttpError(400, 'decision must be approve or changes');
+    if (decision === 'changes' && !note) throw new HttpError(400, 'Write what should change');
+    const now = new Date().toISOString();
+    if (decision === 'approve') {
+      db.prepare("UPDATE drafts SET review_status = 'approved', approved_by = ?, approved_at = ?, reviewed_by = ?, reviewed_at = ?, review_note = ?, updated_at = ? WHERE id = ?").run(req.user.id, now, req.user.id, now, note, now, d.id);
+      draftEvent(d.id, req.user, 'approved', note);
+    } else {
+      db.prepare("UPDATE drafts SET review_status = 'changes', approved_by = NULL, approved_at = '', reviewed_by = ?, reviewed_at = ?, review_note = ?, updated_at = ? WHERE id = ?").run(req.user.id, now, note, now, d.id);
+      draftEvent(d.id, req.user, 'changes_requested', note);
+    }
+    res.json({ draft: draftOne(d.id) });
+  });
+  // Last step: the lead answered the sent message.
+  r.post('/drafts/:did/replied', (req, res) => {
+    const d = db.prepare('SELECT * FROM drafts WHERE id = ?').get(Number(req.params.did));
+    if (!d) throw new HttpError(404, 'Draft not found');
+    if (d.status !== 'sent') throw new HttpError(400, 'Only a sent message can be marked as replied');
+    if (d.replied_at) throw new HttpError(400, 'Already marked as replied');
+    const now = new Date().toISOString();
+    db.prepare('UPDATE drafts SET replied_at = ?, updated_at = ? WHERE id = ?').run(now, now, d.id);
+    draftEvent(d.id, req.user, 'replied', String(req.body?.note || ''));
+    res.json({ draft: draftOne(d.id) });
+  });
+  r.get('/drafts/:did/events', (req, res) => {
+    const rows = db.prepare('SELECT e.id, e.action, e.note, e.created_at, u.name AS user_name FROM draft_events e LEFT JOIN users u ON u.id = e.user_id WHERE e.draft_id = ? ORDER BY e.id').all(Number(req.params.did));
+    res.json({ rows });
+  });
+
+  // Per-lead CEO review: submit a qualified lead with its plan; the CEO approves once or asks for changes.
+  r.get('/ceo-queue', (req, res) => {
+    const rows = db.prepare(`SELECT l.id, TRIM(l.first_name || ' ' || l.last_name) AS name, l.company, l.title, l.assessment, l.why_in_pipeline, l.next_action, l.ceo_status, l.ceo_note, l.ceo_at, u.name AS owner_name
+      FROM leads l LEFT JOIN users u ON u.id = l.owner_id WHERE l.deleted_at = '' AND l.ceo_status = 'submitted' ORDER BY l.ceo_at, l.id`).all();
+    res.json({ rows, count: rows.length });
+  });
+  r.post('/:id/ceo-submit', (req, res) => {
+    const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(Number(req.params.id));
+    if (!lead || lead.deleted_at) throw new HttpError(404, 'Lead not found');
+    if (lead.ceo_status === 'submitted') throw new HttpError(400, 'This lead is already waiting for the CEO');
+    if (lead.ceo_status === 'approved') throw new HttpError(400, 'The CEO already approved this lead');
+    const note = String(req.body?.note || '').trim().slice(0, DRAFT_LIMITS.note);
+    const now = new Date().toISOString();
+    tx(db, () => {
+      db.prepare("UPDATE leads SET ceo_status = 'submitted', ceo_note = ?, ceo_at = ?, ceo_by_name = ?, updated_at = ? WHERE id = ?").run(note, now, req.user.name, now, lead.id);
+      logActivity(db, { lead_id: lead.id, user_id: req.user.id, type: 'note', note: `Sent to the CEO for review${note ? ': ' + note : ''}` });
+    });
+    res.json({ ok: true });
+  });
+  r.post('/:id/ceo-review', (req, res) => {
+    if (req.user.role !== 'admin') throw new HttpError(403, 'Only the CEO (an admin) can approve or request changes');
+    const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(Number(req.params.id));
+    if (!lead || lead.deleted_at) throw new HttpError(404, 'Lead not found');
+    const decision = req.body?.decision;
+    const note = String(req.body?.note || '').trim().slice(0, DRAFT_LIMITS.note);
+    if (!['approve', 'changes'].includes(decision)) throw new HttpError(400, 'decision must be approve or changes');
+    if (decision === 'changes' && !note) throw new HttpError(400, 'Write what should change');
+    const now = new Date().toISOString();
+    const status = decision === 'approve' ? 'approved' : 'changes';
+    tx(db, () => {
+      db.prepare('UPDATE leads SET ceo_status = ?, ceo_note = ?, ceo_at = ?, ceo_by_name = ?, updated_at = ? WHERE id = ?').run(status, note, now, req.user.name, now, lead.id);
+      logActivity(db, { lead_id: lead.id, user_id: req.user.id, type: 'note', note: `CEO review: ${CEO_STATUS[status]}${note ? ': ' + note : ''}` });
+    });
+    res.json({ ok: true, ceo_status: status });
   });
 
   r.get('/:id', (req, res) => {
@@ -717,6 +822,7 @@ export function leadsRoutes(db) {
     const f = cleanDraft(req.body || {}, { partial: false });
     checkConnectNote(f.channel, f.body);
     if (['linkedin_comment', 'linkedin_comment_reply'].includes(f.channel) && !f.target_url) throw new HttpError(400, 'A comment draft needs the direct link (target_url) to the exact post. Find the post first.');
+    if (f.channel === 'website_contact' && !f.target_url) throw new HttpError(400, 'A Contact Us draft needs the link (target_url) to the form page');
     const dup = db.prepare("SELECT id FROM drafts WHERE lead_id = ? AND channel = ? AND body = ? AND status = 'ready'").get(lead.id, f.channel, f.body);
     if (dup) return res.json({ draft: draftOne(dup.id), duplicate: true });
     const now = new Date().toISOString();
@@ -724,6 +830,7 @@ export function leadsRoutes(db) {
       const ins = db.prepare('INSERT INTO drafts(lead_id, channel, subject, body, note, target_url, send_window, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
         .run(lead.id, f.channel, f.subject || '', f.body, f.note || '', f.target_url || '', f.send_window || DRAFT_SEND_WINDOW, 'ready', req.user.id, now, now);
       logActivity(db, { lead_id: lead.id, user_id: req.user.id, type: 'note', note: `Draft ready (${DRAFT_CHANNELS[f.channel]}), NOT sent: ${preview(f.body)}` });
+      draftEvent(Number(ins.lastInsertRowid), req.user, 'created');
       return Number(ins.lastInsertRowid);
     });
     res.status(201).json({ draft: draftOne(id) });
@@ -736,11 +843,18 @@ export function leadsRoutes(db) {
     if (d.status !== 'ready') throw new HttpError(400, 'This draft is already ' + d.status);
     const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(d.lead_id);
     if (!lead || lead.deleted_at) throw new HttpError(400, 'This lead is in the recycle bin. Restore it first.');
-    const text = d.channel === 'email' && d.subject ? `Subject: ${d.subject}\n\n${d.body}` : d.body;
+    // CEO approval gate: a person cannot mark an outreach draft sent until the CEO approved this exact text. Admins can; switch off with settings key draft_gate = off.
+    if (gateOn() && APPROVAL_REQUIRED_CHANNELS.includes(d.channel) && d.review_status !== 'approved' && lead.ceo_status !== 'approved' && req.user.role !== 'admin') {
+      throw new HttpError(400, 'The CEO has not approved this lead yet. Use "Send lead to CEO" in the lead panel. Once he approves the lead, you can send every step without asking again.');
+    }
+    const evidence = String(req.body?.evidence || '').trim().slice(0, 1000);
+    if (d.channel === 'website_contact' && evidence.length < 5) throw new HttpError(400, 'Paste the confirmation the website showed after you submitted the form (or write that there was none)');
+    const text = d.channel === 'email' && d.subject ? `Subject: ${d.subject}\n\n${d.body}` : d.channel === 'website_contact' ? `${d.body}\n\nForm: ${d.target_url}\nConfirmation: ${evidence}` : d.body;
     tx(db, () => {
-      db.prepare("UPDATE drafts SET status = 'sent', sent_by = ?, sent_at = ?, updated_at = ? WHERE id = ?").run(req.user.id, new Date().toISOString(), new Date().toISOString(), d.id);
+      db.prepare("UPDATE drafts SET status = 'sent', sent_by = ?, sent_at = ?, updated_at = ?, evidence = ? WHERE id = ?").run(req.user.id, new Date().toISOString(), new Date().toISOString(), evidence, d.id);
+      draftEvent(d.id, req.user, 'sent', evidence);
       recordActivity(lead, d.channel, text.slice(0, 2000), req.user);
-      if (['linkedin_dm', 'linkedin_inmail', 'email'].includes(d.channel)) db.prepare('UPDATE leads SET step_done = ? WHERE id = ?').run(todayLocal(), lead.id);
+      if (['linkedin_dm', 'linkedin_inmail', 'email', 'website_contact'].includes(d.channel)) db.prepare('UPDATE leads SET step_done = ? WHERE id = ?').run(todayLocal(), lead.id);
     });
     res.json({ draft: draftOne(d.id) });
   });
@@ -753,6 +867,7 @@ export function leadsRoutes(db) {
     if (!(type in MANUAL_TYPES)) throw new HttpError(400, 'Unknown activity type');
     const text = String(note || '').trim();
     if (type === 'note' && !text) throw new HttpError(400, 'Write a note first');
+    if (type === 'website_contact' && text.length < 15) throw new HttpError(400, 'Paste the form link and the confirmation the website showed');
     if (type === 'website_research' && text.length < 15) throw new HttpError(400, 'Write what you found on the website (what they do, size, any LMS or platform)');
     const added = tx(db, () => recordActivity(lead, type, text, req.user));
     if (!added) return res.json({ ok: true, duplicate: true });

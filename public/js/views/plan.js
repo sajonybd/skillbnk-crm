@@ -1,3 +1,4 @@
+import { drawExceptions } from './outcomes.js';
 import { api, qs } from '../api.js';
 import { h, fill, toast, avatar, asUrl, pref } from '../util.js';
 import { openLead } from './lead-drawer.js';
@@ -17,7 +18,9 @@ export async function render(root, ctx) {
   const tabs = h('div', { class: 'seg' });
   const head = h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Plan'), h('div', { class: 'muted', id: 'plan-sub' }, '')), h('div', { class: 'spacer' }), tabs);
   const banner = h('div');
-  root.replaceChildren(head, banner, chips, body);
+  const exBox = h('div', { class: 'card', style: 'margin-bottom:14px;padding:12px;display:' + (isAdmin ? '' : 'none') });
+  root.replaceChildren(head, banner, exBox, chips, body);
+  if (isAdmin) drawExceptions(exBox, ctx).catch(() => {});
 
   async function load(keepScroll) {
     const y = window.scrollY;

@@ -287,8 +287,8 @@ export function reportRoutes(db) {
   });
 
   // ── Weekly KPI report ──────────────────────────────────────────────────────
-  // The team week runs Saturday to Friday (Friday is off), so by default this is the week so far.
-  function weekStartSat(d) { const dow = new Date(d + 'T00:00:00Z').getUTCDay(); return addDays(d, -((dow + 1) % 7)); }
+  // The team week runs Monday to Saturday (owner, 24 Nov 2026), so by default this is the week so far. Sunday shows the week that just ended.
+  function weekStartSat(d) { const dow = new Date(d + 'T00:00:00Z').getUTCDay(); return addDays(d, -((dow + 6) % 7)); }
 
   function weeklyData(u, from, to) {
     const list = acts(u.id, from, to);

@@ -145,7 +145,7 @@ export function openDb(file) {
   // Outreach funnel fields (Sections 40–42). Added once, existing rows get blanks.
   const OUTREACH_COLS = ['lead_category', 'tier', 'problem_pool', 'why_in_pipeline', 'todays_question', 'outreach_status', 'denial_reason', 'opportunity_path', 'channel', 'assessment', 'invite_sent_date', 'accepted_date', 'first_dm_date'];
   const have = db.prepare('PRAGMA table_info(leads)').all().map((c) => c.name);
-  for (const c of OUTREACH_COLS) if (!have.includes(c)) db.exec(`ALTER TABLE leads ADD COLUMN ${c} TEXT NOT NULL DEFAULT ''`);
+  for (const c of [...OUTREACH_COLS, 'ceo_status', 'ceo_note', 'ceo_at', 'ceo_by_name']) if (!have.includes(c)) db.exec(`ALTER TABLE leads ADD COLUMN ${c} TEXT NOT NULL DEFAULT ''`);
   db.exec('CREATE INDEX IF NOT EXISTS idx_leads_ostatus ON leads(outreach_status)');
   // "Opportunity path" was merged into Quality (one lead type). Copy old values into blank Quality once; the column stays, unused.
   db.exec(`UPDATE leads SET quality = CASE opportunity_path
@@ -195,6 +195,20 @@ export function openDb(file) {
   `);
   const dcols = db.prepare('PRAGMA table_info(drafts)').all().map((c) => c.name);
   if (!dcols.includes('target_url')) db.exec("ALTER TABLE drafts ADD COLUMN target_url TEXT NOT NULL DEFAULT ''");
+  // CEO review workflow (H10): Draft -> Submitted -> Approved -> Sent -> Replied. status stays ready/sent/discarded; review_status is the review step.
+  for (const [col, ddl] of [
+    ['review_status', "TEXT NOT NULL DEFAULT 'draft'"], ['submitted_by', 'INTEGER'], ['submitted_at', "TEXT NOT NULL DEFAULT ''"],
+    ['review_note', "TEXT NOT NULL DEFAULT ''"], ['reviewed_by', 'INTEGER'], ['reviewed_at', "TEXT NOT NULL DEFAULT ''"],
+    ['replied_at', "TEXT NOT NULL DEFAULT ''"], ['evidence', "TEXT NOT NULL DEFAULT ''"],
+  ]) if (!dcols.includes(col)) db.exec(`ALTER TABLE drafts ADD COLUMN ${col} ${ddl}`);
+  if (!dcols.includes('review_status')) db.exec("UPDATE drafts SET review_status = 'approved' WHERE approved_at != ''");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS draft_events (
+      id INTEGER PRIMARY KEY, draft_id INTEGER NOT NULL REFERENCES drafts(id), user_id INTEGER REFERENCES users(id),
+      action TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_draft_events_draft ON draft_events(draft_id, id);
+  `);
   // New daily targets (website research, comment replies, follow-ups): give each member a row once; never overwrite a number someone changed.
   for (const [m, n] of [['website_research', 30], ['linkedin_comment_reply', 10], ['linkedin_followup', 10]]) {
     db.prepare("INSERT OR IGNORE INTO member_targets(user_id, metric, daily_target) SELECT id, ?, ? FROM users WHERE active = 1 AND role = 'member'").run(m, n);

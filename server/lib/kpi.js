@@ -17,6 +17,9 @@ export function weekStart(date) {
   return addDays(date, -((dow - WEEK_START + 7) % 7));
 }
 
+// Last working day of the team week: Saturday (the week runs Monday to Saturday; Sunday work counts toward the week that just ended).
+export const weekEnd = (week) => addDays(week, 5);
+
 export function getKpiStart(db) {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'kpi_start_week'").get();
   if (row) return row.value;

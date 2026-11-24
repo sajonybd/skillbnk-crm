@@ -3,6 +3,7 @@ import { DEFAULT_WEEKLY_MEETING_TARGET } from '../config.js';
 import { HttpError, tx } from '../db.js';
 import { requireAdmin } from '../auth.js';
 import { computeKpi, getKpiStart, todayLocal, weekStart } from '../lib/kpi.js';
+import { computeOutcomes, computeExceptions } from '../lib/outcomes.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -16,6 +17,15 @@ export function kpiRoutes(db) {
     const members = computeKpi(db, week);
     res.json({ currentWeek: current, week, start: getKpiStart(db), defaultTarget: DEFAULT_WEEKLY_MEETING_TARGET, canEdit: req.user.role === 'admin', members });
   });
+
+  // Outcome numbers per person (counts, no targets) and the exceptions list.
+  r.get('/outcomes', (req, res) => {
+    const current = weekStart(todayLocal());
+    let week = DATE_RE.test(req.query.week || '') ? weekStart(req.query.week) : current;
+    if (week > current) week = current;
+    res.json({ currentWeek: current, ...computeOutcomes(db, week) });
+  });
+  r.get('/exceptions', (req, res) => res.json(computeExceptions(db)));
 
   // Admin: set the weekly target. Takes effect from the current week onward.
   r.put('/targets', requireAdmin, (req, res) => {

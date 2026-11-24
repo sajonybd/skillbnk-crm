@@ -2,6 +2,7 @@ import { api, qs } from '../api.js';
 import { h, fill, options, debounce, toast, avatar, fullName, todayStr, shortDate, fmtDateTime } from '../util.js';
 import { icon } from '../icons.js';
 import { openLead } from './lead-drawer.js';
+import { drawOutcomes } from './outcomes.js';
 
 // Filters survive page switches within the session.
 const state = { status: 'booked', when: '', user: '', q: '', sort: 'date', dir: 'asc', page: 1, limit: 50, week: '' };
@@ -14,6 +15,7 @@ export async function render(root, ctx) {
   const people = ctx.users.filter((u) => u.active);
 
   const kpiBox = h('div', { class: 'card', style: 'margin-bottom:14px' });
+  const outBox = h('div', { class: 'card', style: 'margin-bottom:14px;padding:12px' });
   const cards = h('div', { class: 'metrics' });
   const scheduleBox = h('div', { class: 'card', style: 'margin-bottom:14px;padding:16px;display:none' });
   const tableWrap = h('div', { class: 'tablewrap' });
@@ -40,7 +42,7 @@ export async function render(root, ctx) {
     h('div', { class: 'page-head' },
       h('div', null, h('h1', null, 'Meetings'), h('div', { class: 'muted' }, 'Booked, completed and cancelled meetings, and the weekly booking KPI')),
       h('div', { class: 'spacer' }), scheduleBtn),
-    scheduleBox, kpiBox, cards,
+    scheduleBox, kpiBox, outBox, cards,
     h('div', { class: 'card' },
       h('div', { class: 'toolbar' }, statusSeg, h('div', { class: 'searchbox' }, icon('search', 15), search), whenSel, userSel, h('div', { class: 'spacer' }), count),
       tableWrap, pager));
@@ -53,6 +55,7 @@ export async function render(root, ctx) {
     const sq = qs({ user: state.user });
     [summary, kpi] = await Promise.all([api('GET', '/api/meetings/summary?' + sq), api('GET', '/api/kpi?' + qs({ week: state.week }))]);
     drawCards(); drawKpi();
+    drawOutcomes(outBox, kpi.week).catch(() => {});
     await load();
   }
 

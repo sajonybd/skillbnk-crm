@@ -62,6 +62,8 @@ function linksEl(l, links = [], track = null) {
     mkLink('co', 'building', 'Company page', asUrl(l.company_linkedin), 'Open company LinkedIn (visit is logged)', 'company'),
     drive ? mkLink('drive', 'folder', 'Drive', drive.url, 'Open Google Drive') : null,
     gpt ? mkLink('gpt', 'sparkles', 'ChatGPT', gpt.url, 'Open ChatGPT chat') : null,
+    links.find((x) => x.kind === 'booking') ? mkLink('', 'calendar', 'Book a meeting', links.find((x) => x.kind === 'booking').url, 'Open their booking link') : null,
+    links.find((x) => x.kind === 'contact') ? mkLink('', 'mail', 'Contact Us page', links.find((x) => x.kind === 'contact').url, 'Open their Contact Us page') : null,
     mkLink('web', 'globe', 'Website', asUrl(l.website), 'Open website'),
     l.email ? mkLink('', 'mail', 'Email', 'mailto:' + l.email, 'Send email') : null,
     l.email ? h('button', { class: 'btn', onclick: () => copyText(l.email) }, icon('copy', 14), 'Copy email') : null);
@@ -194,6 +196,24 @@ export async function openLead(id, ctx, onChange = () => {}) {
     return h('section', null, h('h3', null, 'Links'), list, h('div', { class: 'resform' }, url, kind, label, add));
   }
 
+  // One CEO decision per qualified lead; after approval every step can be sent without asking again.
+  function ceoSection(l) {
+    const st = l.ceo_status || '';
+    const label = { submitted: ['Waiting for CEO', 'amber'], approved: ['CEO approved', 'green'], changes: ['CEO asked for changes', 'red'] }[st];
+    const isAdmin = ctx.user.role === 'admin';
+    const note = h('input', { placeholder: st === 'submitted' && isAdmin ? 'Comment (needed for changes)' : 'Why this lead, and the plan (optional)' });
+    const go = (path, body, msg) => async () => { try { await api('POST', `/api/leads/${id}/${path}`, body()); changed = true; toast(msg); load(); } catch (e) { toast(e.message, true); } };
+    return h('section', null, h('h3', null, 'CEO review'),
+      h('div', { class: 'row', style: 'gap:8px;align-items:center;flex-wrap:wrap' }, label ? h('span', { class: 'chip noav ' + label[1] }, label[0]) : h('span', { class: 'muted' }, 'Not sent to the CEO yet'),
+        l.ceo_by_name && st ? h('span', { class: 'muted' }, `${l.ceo_by_name} · ${timeAgo(l.ceo_at)}`) : null),
+      l.ceo_note ? h('div', { class: 'muted', style: 'margin-top:4px' }, l.ceo_note) : null,
+      h('div', { class: 'row', style: 'gap:6px;margin-top:6px;flex-wrap:wrap' }, note,
+        ['', 'changes'].includes(st) ? h('button', { class: 'btn small', onclick: go('ceo-submit', () => ({ note: note.value }), 'Sent to the CEO') }, 'Send lead to CEO') : null,
+        isAdmin && st !== 'approved' ? h('button', { class: 'btn small primary', onclick: go('ceo-review', () => ({ decision: 'approve', note: note.value }), 'Approved') }, 'Approve lead') : null,
+        isAdmin && st === 'submitted' ? h('button', { class: 'btn small', onclick: go('ceo-review', () => ({ decision: 'changes', note: note.value }), 'Changes requested') }, 'Request changes') : null),
+      h('div', { class: 'sub' }, 'The CEO approves a qualified lead and its plan once. After that you can send each step without asking again.'));
+  }
+
   function draw(l, acts, meetings, links, fit, guide, drafts = []) {
     if (l.deleted_at) return drawTrashed(l, acts, meetings, links);
     const { stages, qualities, manualTypes } = ctx.config;
@@ -321,6 +341,7 @@ export async function openLead(id, ctx, onChange = () => {}) {
           field('Owner', owner), field('Stage', stage),
           field('Lead type', quality), field('', h('span')),
           field('Next action', nextAction), field('Next action date', nextDate))),
+      ceoSection(l),
       h('section', null, h('h3', null, 'Drafts (not sent)'), drafts.map((d) => draftCard(d, { onChange: () => { changed = true; load(); }, ctx })),
         newDraftForm(l, { onSaved: () => { changed = true; load(); } })),
       outreachSection,

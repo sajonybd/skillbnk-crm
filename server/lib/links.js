@@ -16,6 +16,9 @@ export function detectKind(url) {
   const host = new URL(url).hostname.toLowerCase();
   if (host === 'chatgpt.com' || host.endsWith('.chatgpt.com') || host === 'chat.openai.com') return 'chatgpt';
   if (host === 'drive.google.com' || host === 'docs.google.com' || host === 'sheets.google.com' || host === 'slides.google.com') return 'drive';
+  if (/(^|\.)(calendly\.com|cal\.com|savvycal\.com|tidycal\.com|zcal\.co|youcanbook\.me|setmore\.com|acuityscheduling\.com|squareup\.com|meetings\.hubspot\.com|app\.hubspot\.com)$/.test(host)) return 'booking';
+  if (host === 'outlook.office365.com' || host === 'outlook.office.com') { if (/\/bookwithme|\/book\//i.test(new URL(url).pathname)) return 'booking'; }
+  if (/\/(contact|contact-us|contactus|get-in-touch)(\/|$|\.)/i.test(new URL(url).pathname)) return 'contact';
   return 'other';
 }
 

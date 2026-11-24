@@ -17,7 +17,7 @@ export const PUBLIC_DIR = path.join(root, 'public');
 // Asia/Dhaka is UTC+6 with no daylight saving, so a fixed offset is exact.
 export const TZ = 'Asia/Dhaka';
 export const TZ_OFFSET_MIN = 360;
-export const WEEK_START = 1; // 0 = Sunday, 1 = Monday
+export const WEEK_START = 1; // 0 = Sunday, 1 = Monday. The team week is Monday to Saturday (owner, 24 Nov 2026); Sunday work counts toward the week that just ended.
 
 // Pipeline stage: where the lead is in the process.
 export const STAGES = ['New', 'Contacted', 'Replied', 'Meeting Booked', 'Meeting Done', 'Closed'];
@@ -52,6 +52,7 @@ export const MANUAL_TYPES = {
   linkedin_comment_reply: 'Comment reply',
   linkedin_followup: 'Follow-up / reply message',
   website_research: 'Website research',
+  website_contact: 'Contact Us form',
 };
 
 // The LinkedIn actions (shown as a group / menu in the UI).
@@ -77,7 +78,9 @@ export const PLAN_SWITCH_HOUR = Number(process.env.PLAN_SWITCH_HOUR || 18);
 export const DEFAULT_WEEKLY_MEETING_TARGET = Number(process.env.WEEKLY_MEETING_TARGET || 8);
 
 // Resource links that can be attached to a lead.
-export const LINK_KINDS = { drive: 'Google Drive', chatgpt: 'ChatGPT', other: 'Link' };
+export const LINK_KINDS = { drive: 'Google Drive', chatgpt: 'ChatGPT', booking: 'Booking link', contact: 'Contact Us page', other: 'Link' };
+// Per-lead CEO review (24 Nov 2026): the CEO approves a qualified lead and its plan once; the team then works every step without asking again.
+export const CEO_STATUS = { submitted: 'Waiting for CEO', approved: 'CEO approved', changes: 'CEO asked for changes' };
 
 // Everything that can appear in the activity log (manual + automatic).
 export const TYPE_LABELS = {
@@ -154,6 +157,13 @@ export const DRAFT_CHANNELS = {
   linkedin_comment_reply: 'Comment reply',
   linkedin_followup: 'Follow-up / reply message',
   email: 'Email',
+  website_contact: 'Website Contact Us form',
 };
+// CEO review (H10, CEO feedback 24 Nov 2026). Label of each review step shown on a draft; a sent draft shows Sent, then Replied.
+export const DRAFT_REVIEW = { draft: 'Draft', submitted: 'Waiting for CEO', approved: 'Approved', changes: 'Changes requested' };
+// A person who is not an admin can mark these channels sent only after the CEO (an admin) approved the draft.
+// Comments, comment replies, connection notes and follow-up/reply messages are not gated (time-sensitive or short; a person still approves them).
+// Change this list in one place if the owner decides otherwise. An admin can switch the gate off in Settings key draft_gate = off.
+export const APPROVAL_REQUIRED_CHANNELS = ['linkedin_dm', 'linkedin_inmail', 'email', 'website_contact'];
 export const DRAFT_SEND_WINDOW = 'from 5 PM Bangladesh time (6 AM ET) onward, USA morning';
 export const DRAFT_LIMITS = { body: 4000, connect_note: 300, subject: 200, note: 1000 };

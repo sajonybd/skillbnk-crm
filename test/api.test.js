@@ -671,3 +671,86 @@ test('new targets: website research needs a finding, is not a touch, and members
   const t = await call('GET', '/api/targets');
   assert.ok(t.metrics.website_research && t.metrics.linkedin_comment_reply && t.metrics.linkedin_followup);
 });
+
+test('CEO review: submit, approve gate, changes, replied, Contact Us evidence, outcomes', async () => {
+  const mk = await call('POST', '/api/team', { name: 'Rev Person', email: 'rev@skillbnk.local', password: 'secret1' });
+  const res = await fetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'rev@skillbnk.local', password: 'secret1' }) });
+  const ck = res.headers.get('set-cookie').split(';')[0];
+  const lead = (await call('POST', '/api/leads', { first_name: 'Rae', last_name: 'View', company: 'ReviewCo', email: 'rae@reviewco.test' })).id;
+  const d = (await call('POST', `/api/leads/${lead}/drafts`, { channel: 'email', subject: 'Hi', body: 'Question about your cohorts.' }, ck)).draft;
+  assert.equal(d.review_status, 'draft');
+  // A member cannot mark an email sent or approve it themselves
+  assert.equal((await call('POST', `/api/leads/drafts/${d.id}/sent`, {}, ck)).status, 400);
+  assert.equal((await call('PATCH', `/api/leads/drafts/${d.id}`, { approved: true }, ck)).status, 403);
+  assert.equal((await call('POST', `/api/leads/drafts/${d.id}/review`, { decision: 'approve' }, ck)).status, 403);
+  // Submit, CEO asks for changes (comment required), member edits and resubmits
+  assert.equal((await call('POST', `/api/leads/drafts/${d.id}/submit`, {}, ck)).draft.review_status, 'submitted');
+  assert.equal((await call('POST', `/api/leads/drafts/${d.id}/submit`, {}, ck)).status, 400);
+  assert.equal((await call('GET', '/api/leads/drafts/count')).waiting >= 1, true);
+  assert.equal((await call('POST', `/api/leads/drafts/${d.id}/review`, { decision: 'changes' })).status, 400);
+  assert.equal((await call('POST', `/api/leads/drafts/${d.id}/review`, { decision: 'changes', note: 'Too long' })).draft.review_status, 'changes');
+  assert.equal((await call('PATCH', `/api/leads/drafts/${d.id}`, { body: 'Shorter question about your cohorts.' }, ck)).draft.review_status, 'draft');
+  await call('POST', `/api/leads/drafts/${d.id}/submit`, {}, ck);
+  // Approve, then editing the text removes the approval again
+  assert.equal((await call('POST', `/api/leads/drafts/${d.id}/review`, { decision: 'approve' })).draft.review_status, 'approved');
+  assert.equal((await call('PATCH', `/api/leads/drafts/${d.id}`, { body: 'Changed after approval.' }, ck)).draft.review_status, 'draft');
+  await call('POST', `/api/leads/drafts/${d.id}/submit`, {}, ck);
+  await call('POST', `/api/leads/drafts/${d.id}/review`, { decision: 'approve' });
+  const sent = await call('POST', `/api/leads/drafts/${d.id}/sent`, {}, ck);
+  assert.equal(sent.draft.status, 'sent');
+  assert.equal((await call('POST', `/api/leads/drafts/${d.id}/replied`, {}, ck)).draft.replied_at !== '', true);
+  const ev = await call('GET', `/api/leads/drafts/${d.id}/events`);
+  assert.deepEqual(ev.rows.map((e) => e.action).slice(0, 3), ['created', 'submitted', 'changes_requested']);
+  assert.ok(ev.rows.some((e) => e.action === 'sent') && ev.rows.some((e) => e.action === 'replied'));
+  // Comments are not gated
+  const cm = (await call('POST', `/api/leads/${lead}/drafts`, { channel: 'linkedin_comment', body: 'Nice post', target_url: 'https://www.linkedin.com/posts/x' }, ck)).draft;
+  assert.equal((await call('POST', `/api/leads/drafts/${cm.id}/sent`, {}, ck)).draft.status, 'sent');
+  // Contact Us: link needed to draft, confirmation needed to mark sent, logged as website_contact
+  assert.equal((await call('POST', `/api/leads/${lead}/drafts`, { channel: 'website_contact', body: 'Hello from the form' }, ck)).status, 400);
+  const wc = (await call('POST', `/api/leads/${lead}/drafts`, { channel: 'website_contact', body: 'Hello from the form', target_url: 'https://reviewco.test/contact' }, ck)).draft;
+  await call('POST', `/api/leads/drafts/${wc.id}/submit`, {}, ck);
+  await call('POST', `/api/leads/drafts/${wc.id}/review`, { decision: 'approve' });
+  assert.equal((await call('POST', `/api/leads/drafts/${wc.id}/sent`, {}, ck)).status, 400);
+  assert.equal((await call('POST', `/api/leads/drafts/${wc.id}/sent`, { evidence: 'Thanks, we received your message' }, ck)).draft.status, 'sent');
+  const det = await call('GET', `/api/leads/${lead}`);
+  assert.ok(det.activities.some((a) => a.type === 'website_contact' && a.note.includes('Thanks, we received')));
+  // Outcomes and exceptions respond with the member's numbers
+  const out = await call('GET', '/api/kpi/outcomes');
+  const row = out.rows.find((r) => r.id === mk.id);
+  assert.equal(row.emails_sent, 1); assert.equal(row.emails_sent_approved, 1); assert.equal(row.contact_forms, 1); assert.equal(row.drafts_submitted === 2, true);
+  assert.equal(Array.isArray((await call('GET', '/api/kpi/exceptions')).untouched), true);
+});
+
+test('weekly report week runs Monday to Saturday; Sunday belongs to the week that ended', async () => {
+  const { weekStart } = await import('../server/lib/kpi.js');
+  assert.equal(weekStart('2026-11-23'), '2026-11-23'); // Monday
+  assert.equal(weekStart('2026-11-28'), '2026-11-23'); // Saturday
+  assert.equal(weekStart('2026-11-29'), '2026-11-23'); // Sunday
+  assert.equal(weekStart('2026-11-30'), '2026-11-30'); // next Monday
+});
+
+test('per-lead CEO approval unlocks every step; booking and contact links are detected', async () => {
+  const { detectKind } = await import('../server/lib/links.js');
+  assert.equal(detectKind('https://calendly.com/abc/30min'), 'booking');
+  assert.equal(detectKind('https://meetings.hubspot.com/x'), 'booking');
+  assert.equal(detectKind('https://acme.com/contact-us/'), 'contact');
+  assert.equal(detectKind('https://acme.com/about'), 'other');
+  await call('POST', '/api/team', { name: 'Lead Rev', email: 'lrev@skillbnk.local', password: 'secret1' });
+  const res = await fetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'lrev@skillbnk.local', password: 'secret1' }) });
+  const ck = res.headers.get('set-cookie').split(';')[0];
+  const lead = (await call('POST', '/api/leads', { first_name: 'Lou', last_name: 'Lead', company: 'LeadCo', email: 'lou@leadco.test' })).id;
+  const mkDraft = async (body) => (await call('POST', `/api/leads/${lead}/drafts`, { channel: 'linkedin_dm', body }, ck)).draft;
+  const d1 = await mkDraft('First DM text');
+  assert.equal((await call('POST', `/api/leads/drafts/${d1.id}/sent`, {}, ck)).status, 400);
+  assert.equal((await call('POST', `/api/leads/${lead}/ceo-review`, { decision: 'approve' }, ck)).status, 403);
+  assert.equal((await call('POST', `/api/leads/${lead}/ceo-submit`, { note: 'PURSUE, owner of an academy' }, ck)).status, 200);
+  assert.equal((await call('POST', `/api/leads/${lead}/ceo-submit`, {}, ck)).status, 400);
+  assert.equal((await call('GET', '/api/leads/ceo-queue')).rows.some((r) => r.id === lead), true);
+  assert.equal((await call('POST', `/api/leads/${lead}/ceo-review`, { decision: 'changes' })).status, 400);
+  assert.equal((await call('POST', `/api/leads/${lead}/ceo-review`, { decision: 'approve', note: 'Go' })).ceo_status, 'approved');
+  // After one approval, every later draft can be sent without asking again
+  assert.equal((await call('POST', `/api/leads/drafts/${d1.id}/sent`, {}, ck)).draft.status, 'sent');
+  const d2 = await mkDraft('Second, follow-up DM text');
+  assert.equal((await call('POST', `/api/leads/drafts/${d2.id}/sent`, {}, ck)).draft.status, 'sent');
+  assert.equal((await call('GET', '/api/leads/ceo-queue')).rows.some((r) => r.id === lead), false);
+});
