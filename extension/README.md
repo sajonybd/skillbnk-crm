@@ -17,5 +17,11 @@ It prepares drafts only. It never sends a message, email or form, and it never c
 4. Review the preview, edit anything, press **Save to CRM**. Then use the quick links (Gmail draft, profile, post, form) to do the human step yourself.
 5. Send leads that qualified (PURSUE or QUALIFY) to the CEO from the lead panel in the CRM.
 
+## Daily sweep (one look instead of every lead)
+Press **Run daily sweep**. It reads the sent-invitations page, the LinkedIn messaging list and the webmail inbox, matches them to your leads, and marks leads that changed (accepted, new message, new email) as "needs review". Then choose **Changed since last check** and press Load leads: only those leads go to ChatGPT, in their own saved chat, with just what is new.
+
+## Automatic check per lead (Settings > "Check website, LinkedIn, webmail")
+Before asking ChatGPT, the extension reads: up to 4 pages of the lead's website (booking links, Contact Us page, platform and payment links, emails), the LinkedIn profile (1st, 2nd or 3rd degree), the message thread when the lead is a 1st-degree connection, and a webmail search for the lead (who wrote last). It pauses between pages like a person. What it cannot read is reported as "not checked", never guessed. **Check only** runs just this step so you can see what it found.
+
 ## If something breaks
 ChatGPT changes its page now and then. If the message box or Send button is not found, only `chatgpt.js` needs a small fix.

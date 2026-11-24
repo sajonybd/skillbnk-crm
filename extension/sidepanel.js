@@ -3,8 +3,9 @@
 const $ = (id) => document.getElementById(id);
 const el = (tag, attrs = {}, ...kids) => { const n = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'class') n.className = v; else if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else if (v !== null && v !== undefined && v !== false) n.setAttribute(k, v === true ? '' : v); } for (const c of kids.flat()) if (c !== null && c !== undefined && c !== false) n.append(c.nodeType ? c : document.createTextNode(String(c))); return n; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-let cfg = { crm: 'https://skillbnk-crm.onrender.com', token: '', project: '', work: 'research', owner: 'me', pause: 30 };
+let cfg = { crm: 'https://skillbnk-crm.onrender.com', token: '', project: '', work: 'research', owner: 'me', pause: 30, deep: true };
 let leads = []; let busy = false; let stop = false; const findings = {}; // lead id -> text the person added
+const deepInfo = {}; // lead id -> { checked: [...], links: [...] } from the automatic check
 
 const log = (m, cls = '') => { const d = el('div', { class: cls }, `${new Date().toLocaleTimeString()} ${m}`); $('log').prepend(d); };
 async function crm(method, path, body) {
@@ -17,9 +18,10 @@ async function crm(method, path, body) {
 async function loadCfg() {
   const s = await chrome.storage.local.get('cfg'); cfg = { ...cfg, ...(s.cfg || {}) };
   for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) $(k).value = cfg[k];
+  $('deep').checked = cfg.deep !== false;
   if (!cfg.token || !cfg.project) $('settings').open = true;
 }
-$('save').onclick = async () => { for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) cfg[k] = $(k).value.trim(); await chrome.storage.local.set({ cfg }); log('Settings saved', 'ok'); };
+$('save').onclick = async () => { for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) cfg[k] = $(k).value.trim(); cfg.deep = $('deep').checked; await chrome.storage.local.set({ cfg }); log('Settings saved', 'ok'); };
 $('master').onclick = async () => { try { const s = await crm('GET', '/api/leads/ai-setup'); await navigator.clipboard.writeText(s.prompt); log(`Master prompt copied (${s.chars.toLocaleString()} characters). Paste it into the ChatGPT project's instructions, or save it as a .txt file and upload it to the project files.`, 'ok'); } catch (e) { log(e.message, 'err'); } };
 
 $('load').onclick = async () => {
@@ -34,9 +36,21 @@ $('load').onclick = async () => {
 };
 function drawQueue() {
   $('queue').replaceChildren(
-    leads.length ? el('div', { class: 'row' }, el('button', { class: 'primary', id: 'runall', onclick: runBatch }, `Research all ${leads.length} in order`), el('button', { onclick: () => { stop = true; log('Stopping after this lead'); } }, 'Stop')) : null,
+    leads.length ? el('div', { class: 'row' }, el('button', { class: 'primary', id: 'runall', onclick: async () => { if (await allSites()) runBatch(); } }, `Research all ${leads.length} in order`), el('button', { onclick: () => { stop = true; log('Stopping after this lead'); } }, 'Stop')) : null,
     ...leads.map((l) => el('div', { class: 'card', id: 'lead' + l.id }, el('b', {}, `${l.first_name} ${l.last_name}`.trim() || l.company), ' ', el('span', { class: 'muted' }, [l.title, l.company].filter(Boolean).join(' · ')),
-      el('div', { class: 'row' }, el('button', { onclick: () => researchOne(l) }, 'Research this lead'), el('button', { onclick: () => scanTab('web', l) }, 'Scan open website'), el('button', { onclick: () => scanTab('li', l) }, 'Read open LinkedIn page'), el('span', { class: 'muted', id: 'f' + l.id }, findings[l.id] ? 'findings added' : '')))));
+      el('div', { class: 'row' }, el('button', { onclick: async () => { if (await allSites()) researchOne(l); } }, 'Research this lead'), el('button', { onclick: async () => { if (await allSites()) deepOnly(l); } }, 'Check only'), el('button', { onclick: () => scanTab('web', l) }, 'Scan open website'), el('button', { onclick: () => scanTab('li', l) }, 'Read open LinkedIn page'), el('span', { class: 'muted', id: 'f' + l.id }, findings[l.id] ? 'findings added' : '')))));
+}
+
+async function allSites() {
+  if (await chrome.permissions.contains({ origins: ['<all_urls>'] })) return true;
+  const ok = await chrome.permissions.request({ origins: ['<all_urls>'] });
+  if (!ok) log('Permission to read websites was declined. It is needed for the automatic check.', 'err');
+  return ok;
+}
+async function deepOnly(lead) {
+  const box = $('work-area'); box.replaceChildren(el('div', { class: 'card' }, `Checking ${lead.first_name} ${lead.last_name}…`));
+  try { const d = await deepCheck(lead); findings[lead.id] = d.text; deepInfo[lead.id] = { checked: d.checked, links: [...(d.website.book || []).map((x) => ({ kind: 'booking', url: x.h })), ...(d.website.contact || []).map((x) => ({ kind: 'contact', url: x.h }))] }; $('f' + lead.id) && ($('f' + lead.id).textContent = 'findings added'); box.replaceChildren(el('div', { class: 'card' }, el('b', {}, 'Check finished (added to the next research)'), el('pre', { style: 'white-space:pre-wrap' }, d.text))); }
+  catch (e) { box.replaceChildren(el('div', { class: 'card err' }, e.message)); }
 }
 
 // ── read-only helpers on the page you have open (they run only when you press the button) ──
@@ -62,9 +76,9 @@ function scanWebsite() {
 function readPage() { return (document.querySelector('main')?.innerText || document.body.innerText || '').replace(/\n{3,}/g, '\n\n').slice(0, 6000); }
 
 // ── ChatGPT ──
-async function chatTab() {
+async function chatTab(url = cfg.project) {
   const [t] = await chrome.tabs.query({ url: 'https://chatgpt.com/*' });
-  const tab = t ? await chrome.tabs.update(t.id, { url: cfg.project, active: false }) : await chrome.tabs.create({ url: cfg.project, active: false });
+  const tab = t ? await chrome.tabs.update(t.id, { url, active: false }) : await chrome.tabs.create({ url, active: false });
   await new Promise((res) => { const f = (id, info) => { if (id === tab.id && info.status === 'complete') { chrome.tabs.onUpdated.removeListener(f); res(); } }; chrome.tabs.onUpdated.addListener(f); setTimeout(res, 20000); });
   for (let i = 0; i < 20; i++) { try { const p = await chrome.tabs.sendMessage(tab.id, { type: 'ping' }); if (p?.ready) return tab.id; } catch { /* page still loading */ } await sleep(1000); }
   throw new Error('ChatGPT did not load. Are you signed in, and is the project link right?');
@@ -84,10 +98,25 @@ async function researchOne(lead) {
   busy = true; const box = $('work-area'); box.replaceChildren(el('div', { class: 'card' }, `Researching ${lead.first_name} ${lead.last_name}…`));
   try {
     if (!cfg.token || !cfg.project) throw new Error('Add the CRM API key and the ChatGPT project link in Settings first.');
-    let { prompt } = await crm('GET', `/api/leads/${lead.id}/ai-prompt?machine=1`);
-    if (findings[lead.id]) prompt = prompt.replace('Anything else I noticed:', 'Anything else I noticed:\n' + findings[lead.id]);
+    if (cfg.deep !== false && !deepInfo[lead.id]) {
+      const d = await deepCheck(lead);
+      findings[lead.id] = d.text + (findings[lead.id] ? '\n' + findings[lead.id] : '');
+      deepInfo[lead.id] = { checked: d.checked, links: [...(d.website.book || []).map((x) => ({ kind: 'booking', url: x.h })), ...(d.website.contact || []).map((x) => ({ kind: 'contact', url: x.h }))] };
+    }
+    const detail = await crm('GET', `/api/leads/${lead.id}`);
+    const chatLink = (detail.links || []).find((k) => k.kind === 'chatgpt' && /\/c\//.test(k.url))?.url;
+    let prompt; let chatUrl = cfg.project;
+    if (detail.lead.research_summary && detail.lead.needs_review && chatLink) {
+      // Already researched: continue in that lead's own chat and send only what is new.
+      chatUrl = chatLink;
+      prompt = `UPDATE ${new Date().toISOString().slice(0, 10)}. New since the last check: ${detail.lead.needs_review}.\n\n${findings[lead.id] || '(no extra findings)'}\n\nRe-assess this lead from the earlier research plus this update. Answer in the same A to F format, but only say what changed. End with the same machine-readable json block as before, with research_summary updated.`;
+      log(`Continuing the saved ChatGPT chat for ${lead.first_name} ${lead.last_name} (only what is new)`);
+    } else {
+      ({ prompt } = await crm('GET', `/api/leads/${lead.id}/ai-prompt?machine=1`));
+      if (findings[lead.id]) prompt = prompt.replace('Anything else I noticed:', 'Anything else I noticed:\n' + findings[lead.id]);
+    }
     log(`Asking ChatGPT about ${lead.first_name} ${lead.last_name}…`);
-    const tabId = await chatTab();
+    const tabId = await chatTab(chatUrl);
     const r = await chrome.tabs.sendMessage(tabId, { type: 'ask', prompt });
     if (!r?.ok) throw new Error(r?.error || 'No answer from ChatGPT');
     const data = extractJson(r.text);
@@ -111,8 +140,8 @@ function card(lead, data, r) {
   const saveBtn = el('button', { class: 'primary', onclick: async () => {
     saveBtn.disabled = true;
     try {
-      const body = { verdict: verdict.value, reason: reason.value, assessment: assessment.value, why_in_pipeline: why.value, todays_question: d.todays_question || '', next_action: next.value, next_action_days: Number(days.value), denial_reason: d.denial_reason || '', research_summary: d.research_summary || '', checked: d.checked || [],
-        links: (d.links || []), drafts: drafts.map((z) => ({ channel: z.x.channel, subject: z.subject.value, body: z.body.value, target_url: z.target.value, note: z.x.note || '' })) };
+      const body = { verdict: verdict.value, reason: reason.value, assessment: assessment.value, why_in_pipeline: why.value, todays_question: d.todays_question || '', next_action: next.value, next_action_days: Number(days.value), denial_reason: d.denial_reason || '', research_summary: d.research_summary || '', checked: [...new Set([...(d.checked || []), ...(deepInfo[lead.id]?.checked || [])])],
+        links: [...(d.links || []), ...(deepInfo[lead.id]?.links || [])], drafts: drafts.map((z) => ({ channel: z.x.channel, subject: z.subject.value, body: z.body.value, target_url: z.target.value, note: z.x.note || '' })) };
       const res = await crm('POST', `/api/leads/${lead.id}/ai-result`, body);
       if (r.url && /\/c\//.test(r.url)) { try { await crm('POST', `/api/leads/${lead.id}/links`, { url: r.url, kind: 'chatgpt', label: 'ChatGPT research' }); } catch { /* already added */ } }
       log(`Saved ${lead.first_name} ${lead.last_name}: ${res.verdict}, ${res.drafts} drafts, ${res.links} links${res.skipped.length ? ', skipped: ' + res.skipped.join('; ') : ''}`, 'ok');
