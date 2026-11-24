@@ -11,7 +11,7 @@ export function seedOps(db) {
 }
 
 // Team default daily targets. The admin can change them (Playbook > Daily targets); stored in settings.
-export const BUILTIN_TARGETS = { linkedin_view: 100, linkedin_comment: 50, linkedin_like: 150, linkedin_follow: 30, linkedin_connect: 20, linkedin_dm: 25, website_research: 30, linkedin_comment_reply: 10, linkedin_followup: 10 };
+export const BUILTIN_TARGETS = { linkedin_view: 100, linkedin_comment: 50, linkedin_like: 150, linkedin_follow: 30, linkedin_connect: 20, linkedin_dm: 25, website_research: 30, linkedin_comment_reply: 0, linkedin_followup: 10, linkedin_inmail: 10, email: 10 };
 
 export function getDefaultTargets(db) {
   try {

@@ -124,6 +124,7 @@ export const TARGET_METRICS = {
   linkedin_view: 'Profile reviews', linkedin_comment: 'Comments', linkedin_like: 'Post likes', linkedin_follow: 'Follows',
   linkedin_connect: 'Connection requests', linkedin_dm: 'Direct messages',
   website_research: 'Website research', linkedin_comment_reply: 'Comment replies', linkedin_followup: 'Follow-up / reply messages',
+  linkedin_inmail: 'InMails', email: 'Emails',
 };
 
 // ── Outreach funnel (playbook Sections 40–42) ───────────────────────────────

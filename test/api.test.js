@@ -841,3 +841,15 @@ test('rulebook version: changes with the rules, is stored per lead with the rese
   await call('POST', `/api/leads/${lead}/ai-result`, { verdict: 'NURTURE', reason: 'later', rules_version: v1 });
   assert.equal((await call('GET', `/api/leads/${lead}`)).lead.rules_version, v1);
 });
+
+test('website research: counted once per lead per day, a repeat is not counted again', async () => {
+  const fresh = await call('POST', '/api/leads', { first_name: 'Wes', last_name: 'Web', company: 'Web Co', email: 'wes@web.co' });
+  const lead = { id: fresh.id };
+  const note = 'Read the site: solo coach, no LMS, PayPal only';
+  const a = await call('POST', `/api/leads/${lead.id}/activities`, { type: 'website_research', note });
+  const b = await call('POST', `/api/leads/${lead.id}/activities`, { type: 'website_research', note: note + ' (second pass)' });
+  assert.equal(a.counted, true);
+  assert.equal(b.duplicate, true);
+  const acts = (await call('GET', `/api/leads/${lead.id}`)).activities;
+  assert.equal(acts.filter((x) => x.type === 'website_research').length, 1);
+});

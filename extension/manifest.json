@@ -1,13 +1,52 @@
 {
   "manifest_version": 3,
   "name": "skillBNK Research Assistant",
-  "version": "0.9.0",
+  "version": "0.10.2",
   "description": "Takes the next lead from the skillBNK CRM, asks ChatGPT in the skillBNK project, and saves the reviewed answer back to the CRM. Prepares drafts only; never sends.",
-  "permissions": ["storage", "sidePanel", "tabs", "scripting", "activeTab", "clipboardWrite"],
-  "host_permissions": ["https://skillbnk-crm.onrender.com/*", "https://chatgpt.com/*"],
-  "optional_host_permissions": ["<all_urls>", "https://www.linkedin.com/*"],
-  "background": { "service_worker": "background.js" },
-  "side_panel": { "default_path": "sidepanel.html" },
-  "action": { "default_title": "skillBNK Research" },
-  "content_scripts": [{ "matches": ["https://chatgpt.com/*"], "js": ["chatgpt.js"], "run_at": "document_idle" }]
+  "permissions": [
+    "storage",
+    "sidePanel",
+    "tabs",
+    "scripting",
+    "activeTab",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "https://skillbnk-crm.onrender.com/*",
+    "https://chatgpt.com/*"
+  ],
+  "optional_host_permissions": [
+    "<all_urls>",
+    "https://www.linkedin.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "skillBNK Research"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*"
+      ],
+      "js": [
+        "chatgpt-main.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*"
+      ],
+      "js": [
+        "chatgpt.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }

@@ -2,6 +2,45 @@
 // Nothing is sent to anyone. Drafts are saved as "ready" and shown with quick links (Gmail compose, profile, post, form).
 const $ = (id) => document.getElementById(id);
 const el = (tag, attrs = {}, ...kids) => { const n = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'class') n.className = v; else if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else if (v !== null && v !== undefined && v !== false) n.setAttribute(k, v === true ? '' : v); } for (const c of kids.flat()) if (c !== null && c !== undefined && c !== false) n.append(c.nodeType ? c : document.createTextNode(String(c))); return n; };
+
+// ── Live panel: shows the plan, the step in progress and the page being opened, so you can see what the extension does ──
+let stopRun = false, livePlanSteps = [], liveIdx = -1, workWin = null; const workTabs = {}; // key -> tab id
+const TAB_NAMES = { chatgpt: 'ChatGPT', linkedin: 'LinkedIn', mail: 'Email', site: 'Website' };
+const tabKeyOf = (url) => /chatgpt\.com/i.test(url) ? 'chatgpt' : /linkedin\.com/i.test(url) ? 'linkedin' : /privateemail\.com|namecheap/i.test(url) ? 'mail' : 'site';
+// Four steady tabs (ChatGPT, LinkedIn, Email, Website) in ONE separate Chrome window. The window is opened without taking focus, so you can keep working in your own window.
+async function siteTab(key, url) {
+  let win = workWin ? await chrome.windows.get(workWin).catch(() => null) : null;
+  let tab = workTabs[key] ? await chrome.tabs.get(workTabs[key]).catch(() => null) : null;
+  if (tab && win && tab.windowId !== win.id) tab = null;
+  if (!win) { win = await chrome.windows.create({ url, focused: false, type: 'normal', width: 1100, height: 800 }); workWin = win.id; tab = win.tabs[0]; for (const k of Object.keys(workTabs)) delete workTabs[k]; }
+  else if (tab) tab = await chrome.tabs.update(tab.id, { url, active: true });
+  else tab = await chrome.tabs.create({ windowId: win.id, url, active: true });
+  workTabs[key] = tab.id; liveTabs();
+  return tab;
+}
+function liveTabs() {
+  const box = document.getElementById('live-tabs'); if (!box) return;
+  box.replaceChildren(el('span', { class: 'muted' }, 'Work window: '), ...Object.entries(workTabs).map(([k, id]) => el('button', { onclick: async () => { try { const t = await chrome.tabs.update(id, { active: true }); await chrome.windows.update(t.windowId, { focused: true }); } catch { log(TAB_NAMES[k] + ' tab was closed', 'err'); } } }, 'Show ' + TAB_NAMES[k])));
+}
+const liveHist = [];
+function liveHistAdd(t) { if (!t || liveHist[0]?.t === t) return; const d = new Date(); liveHist.unshift({ t, at: d.toTimeString().slice(0, 8) }); liveHist.length = Math.min(liveHist.length, 60); const h = document.getElementById('live-hist'); if (h) h.replaceChildren(...liveHist.map((x) => el('div', {}, el('span', { class: 'muted' }, x.at + '  '), x.t))); }
+function liveRender() {
+  const box = $('live-steps'); if (!box) return;
+  box.replaceChildren(...livePlanSteps.map((t, i) => el('div', { style: i < liveIdx ? 'color:#15803d' : i === liveIdx ? 'font-weight:600;color:#1d4ed8' : 'color:#6b7280' }, (i < liveIdx ? '✓ ' : i === liveIdx ? '▶ ' : '○ ') + t)));
+}
+function livePlan(title, steps) {
+  stopRun = false; livePlanSteps = steps; liveIdx = 0; liveHist.length = 0; liveHistAdd('Started: ' + title);
+  $('live').style.display = ''; $('live-title').textContent = title; $('live-stop').style.display = ''; $('live-now').textContent = ''; liveRender();
+}
+function liveAt(i, note) { if (!livePlanSteps.length) return; liveIdx = i; liveRender(); if (note) liveNote(note); }
+function liveNote(t) { const n = $('live-now'); if (n) n.textContent = t; liveHistAdd(t); }
+function liveEnd(text) { document.getElementById('live-read').style.display = 'none'; liveIdx = livePlanSteps.length; liveRender(); $('live-stop').style.display = 'none'; liveNote(text || 'Done'); }
+function checkStop() { if (stopRun) throw new Error('Stopped by you'); }
+chrome.runtime.onMessage.addListener((m) => { if (m?.type === 'progress') liveNote(m.note); });
+let manualResolve = null;
+
+setTimeout(() => { const rb = document.getElementById('live-read'); if (rb) rb.onclick = async () => { try { const r = await chrome.tabs.sendMessage(workTabs.chatgpt, { type: 'read' }); if (manualResolve) manualResolve(r); else liveNote('Nothing is waiting for an answer right now'); } catch (e) { liveNote('Could not read the ChatGPT tab: ' + e.message); } }; }, 0);
+setTimeout(() => { const b = document.getElementById('live-stop'); if (b) b.onclick = () => { stopRun = true; try { stop = true; } catch { /* batch not running */ } liveNote('Stopping after this step…'); }; }, 0);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let cfg = { crm: 'https://skillbnk-crm.onrender.com', token: '', project: '', work: 'plan', owner: 'me', pause: 30, deep: true, setup: true };
 let setup = { text: '', version: '', at: 0 }; // the rulebook and its version code; refreshed every 10 minutes so a rules change is picked up
@@ -45,11 +84,10 @@ async function crm(method, path, body) {
 async function loadCfg() {
   const s = await chrome.storage.local.get('cfg'); cfg = { ...cfg, ...(s.cfg || {}) };
   for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) $(k).value = cfg[k];
-  $('deep').checked = cfg.deep !== false; $('setup').checked = cfg.setup !== false;
-  if (!cfg.token || !cfg.project) $('settings').open = true; else { refreshTargets(); try { appCfg = await crm('GET', '/api/config'); } catch { /* the preview then has no dropdown lists */ } }
+  $('hidedone').checked = cfg.hideDone !== false; $('autosave').checked = cfg.autosave !== false; $('deep').checked = cfg.deep !== false; $('setup').checked = cfg.setup !== false;
+  if (!cfg.token || !cfg.project) $('settings').open = true; else { refreshTargets(); try { appCfg = await crm('GET', '/api/config'); } catch { /* the preview then has no dropdown lists */ } $('load').click(); /* show the list right away */ }
 }
-$('save').onclick = async () => { for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) cfg[k] = $(k).value.trim(); cfg.deep = $('deep').checked; cfg.setup = $('setup').checked; await chrome.storage.local.set({ cfg }); log('Settings saved', 'ok'); };
-$('master').onclick = async () => { try { const s = await crm('GET', '/api/leads/ai-setup'); await navigator.clipboard.writeText(s.prompt); log(`Master prompt copied (${s.chars.toLocaleString()} characters). Paste it into the ChatGPT project's instructions, or save it as a .txt file and upload it to the project files.`, 'ok'); } catch (e) { log(e.message, 'err'); } };
+$('save').onclick = async () => { for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) cfg[k] = $(k).value.trim(); cfg.hideDone = $('hidedone').checked; cfg.autosave = $('autosave').checked; cfg.deep = $('deep').checked; cfg.setup = $('setup').checked; await chrome.storage.local.set({ cfg }); log('Settings saved', 'ok'); $('load').click(); };
 
 $('load').onclick = async () => {
   try {
@@ -59,11 +97,20 @@ $('load').onclick = async () => {
       $('count').textContent = `${acts.length} leads due (${p.members?.[0]?.summary?.carry_over || 0} more carried over)`;
       drawQueue(); return;
     }
-    const q = new URLSearchParams({ limit: '20', sort: 'updated_at' });
+    const q = new URLSearchParams({ limit: '100', sort: 'updated_at' });
     if (cfg.work === 'changed') q.set('needs_review', '1'); else q.set('work', cfg.work);
     if (cfg.owner === 'me') q.set('owner', 'me');
-    const r = await crm('GET', '/api/leads?' + q); leads = r.rows;
-    $('count').textContent = `${r.total} in this list, showing ${leads.length}`;
+    const r = await crm('GET', '/api/leads?' + q);
+    // Hide what needs no work today: next action is still in the future, or the lead was already researched today. Changed leads always show.
+    const today = new Date().toLocaleDateString('en-CA'); let notDue = 0, doneToday = 0;
+    const keep = (l) => {
+      if (cfg.work === 'changed' || cfg.hideDone === false || l.needs_review) return true;
+      if (l.next_action_date && l.next_action_date > today) { notDue++; return false; }
+      if (l.research_at && String(l.research_at).slice(0, 10) === today) { doneToday++; return false; }
+      return true;
+    };
+    const due = r.rows.filter(keep); leads = due.slice(0, 20);
+    $('count').textContent = `${r.total} in this list. ${due.length} need work now, showing ${leads.length}.` + (notDue || doneToday ? ` Hidden: ${notDue} not due yet, ${doneToday} already researched today.` : '');
     drawQueue();
   } catch (e) { log(e.message, 'err'); }
 };
@@ -75,7 +122,31 @@ function drawQueue() {
         return el('div', {}, el('div', { class: 'row' }, el('span', { class: 'chip', style: 'font-weight:600;background:' + ({ green: '#d7f5e0', amber: '#fff1c2', blue: '#dbe8ff' }[tone]) }, label), l.plan?.pursue ? el('span', { class: 'chip PURSUE' }, 'PURSUE') : null, due ? el('span', { class: 'muted' }, due) : null),
           el('div', {}, el('b', {}, 'Do now: '), l.plan?.action || l.next_action || (STATE[k] || [])[0]), el('div', { class: 'muted' }, 'The extension will: ' + what), l.plan?.reason ? el('div', { class: 'muted' }, 'Why: ' + l.plan.reason) : null,
           [l.stage, l.needs_review && 'NEW: ' + l.needs_review].filter(Boolean).length ? el('div', { class: 'muted' }, [l.stage, l.needs_review && 'NEW: ' + l.needs_review].filter(Boolean).join(' · ')) : null); })(),
-      el('div', { class: 'row' }, el('button', { onclick: async () => { if (await allSites()) researchOne(l); } }, 'Research this lead'), el('button', { onclick: async () => { if (await allSites()) deepOnly(l); } }, 'Check only'), el('button', { onclick: () => { document.getElementById('lead' + l.id)?.remove(); log(`Skipped ${l.first_name} ${l.last_name} (nothing saved)`); } }, 'Skip'), el('button', { onclick: () => scanTab('web', l) }, 'Scan open website'), el('button', { onclick: () => scanTab('li', l) }, 'Read open LinkedIn page'), el('span', { class: 'muted', id: 'f' + l.id }, findings[l.id] ? 'findings added' : '')))));
+      el('div', { class: 'row' }, el('button', { onclick: async () => { if (await allSites()) researchOne(l); } }, 'Research this lead'), el('button', { onclick: async () => { if (await allSites()) deepOnly(l); } }, 'Check only'), el('button', { onclick: () => { document.getElementById('lead' + l.id)?.remove(); log(`Skipped ${l.first_name} ${l.last_name} (nothing saved)`); } }, 'Skip'), el('button', { onclick: () => scanTab('web', l) }, 'Scan open website'), el('button', { onclick: () => scanTab('li', l) }, 'Read open LinkedIn page'), el('span', { class: 'muted', id: 'f' + l.id }, findings[l.id] ? 'findings added' : '')), logRow(l))));
+}
+
+// ── Log what you did by hand, in one click, so the CRM history, targets and weekly report stay true ──
+const ACTION_LABELS = { linkedin_like: 'Liked a post', linkedin_comment: 'Commented on a post', linkedin_comment_reply: 'Replied to a comment', linkedin_follow: 'Followed', linkedin_connect: 'Sent connection request', linkedin_dm: 'Sent LinkedIn DM', linkedin_followup: 'Sent follow-up message', linkedin_inmail: 'Sent InMail', email: 'Sent email', website_contact: 'Submitted website form', meeting: 'Meeting booked', call: 'Call', note: 'Note only' };
+function logRow(lead) {
+  const sel = el('select', {}, el('option', { value: '' }, 'Log what I did…'), ...Object.entries(ACTION_LABELS).map(([k, v]) => el('option', { value: k }, v)));
+  const note = el('input', { placeholder: 'note, link or what you wrote (optional)', style: 'flex:1;min-width:120px' });
+  const btn = el('button', { onclick: async () => {
+    const type = sel.value; if (!type) return;
+    try {
+      if (type === 'meeting') {
+        const date = prompt('Meeting date (YYYY-MM-DD):', ''); if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) { log('Meeting not logged: use a date like 2026-12-01', 'err'); return; }
+        const time = prompt('Time (optional, e.g. 15:30 Michigan):', '') || '';
+        await crm('POST', `/api/leads/${lead.id}/meetings`, { scheduled_date: date, scheduled_time: time, notes: note.value, link: /^https?:/i.test(note.value) ? note.value : '' });
+      } else {
+        let text = note.value.trim();
+        if (type === 'website_contact' && text.length < 15) { text = prompt('Paste the form link and the confirmation the website showed (15+ characters):', text) || ''; if (text.trim().length < 15) return; }
+        if (type === 'note' && !text) { log('Write a note first', 'err'); return; }
+        await crm('POST', `/api/leads/${lead.id}/activities`, { type, note: text });
+      }
+      log(`${lead.first_name} ${lead.last_name}: logged "${ACTION_LABELS[type]}"`, 'ok'); sel.value = ''; note.value = ''; btn.textContent = 'Logged ✓'; setTimeout(() => { btn.textContent = 'Log'; }, 2000); refreshTargets();
+    } catch (e) { log(e.message, 'err'); }
+  } }, 'Log');
+  return el('div', { class: 'row' }, sel, note, btn);
 }
 
 async function allSites() {
@@ -86,8 +157,9 @@ async function allSites() {
 }
 async function deepOnly(lead) {
   const box = $('work-area'); box.replaceChildren(el('div', { class: 'card' }, `Checking ${lead.first_name} ${lead.last_name}…`));
-  try { if (!lead.website && !lead.hydrated) { const full = (await crm('GET', `/api/leads/${lead.id}`)).lead; Object.assign(lead, full, { hydrated: true }); } const d = await deepCheck(lead); findings[lead.id] = d.text; deepInfo[lead.id] = { checked: d.checked, links: [...(d.website.book || []).map((x) => ({ kind: 'booking', url: x.h })), ...(d.website.contact || []).map((x) => ({ kind: 'contact', url: x.h }))] }; $('f' + lead.id) && ($('f' + lead.id).textContent = 'findings added'); box.replaceChildren(el('div', { class: 'card' }, el('b', {}, 'Check finished (added to the next research)'), el('pre', { style: 'white-space:pre-wrap' }, d.text))); }
-  catch (e) { box.replaceChildren(el('div', { class: 'card err' }, e.message)); }
+  livePlan(`Checking ${lead.first_name} ${lead.last_name}`, ['LinkedIn status first: accepted or pending? last activity, conversation', 'Website (only if not read recently)', 'Webmail (only if not searched recently)']);
+  try { if (!lead.hydrated) { const full = (await crm('GET', `/api/leads/${lead.id}`)).lead; Object.assign(lead, full, { hydrated: true }); } const d = await deepCheck(lead); liveEnd('Check finished. The result is below.'); findings[lead.id] = d.text; deepInfo[lead.id] = { checked: d.checked, links: [...(d.website.book || []).map((x) => ({ kind: 'booking', url: x.h })), ...(d.website.contact || []).map((x) => ({ kind: 'contact', url: x.h }))] }; $('f' + lead.id) && ($('f' + lead.id).textContent = 'findings added'); box.replaceChildren(el('div', { class: 'card' }, el('b', {}, 'Check finished (added to the next research)'), el('pre', { style: 'white-space:pre-wrap' }, d.text))); }
+  catch (e) { box.replaceChildren(el('div', { class: 'card err' }, e.message)); liveEnd('Stopped: ' + e.message); }
 }
 
 // ── read-only helpers on the page you have open (they run only when you press the button) ──
@@ -114,8 +186,8 @@ function readPage() { return (document.querySelector('main')?.innerText || docum
 
 // ── ChatGPT ──
 async function chatTab(url = cfg.project) {
-  const [t] = await chrome.tabs.query({ url: 'https://chatgpt.com/*' });
-  const tab = t ? await chrome.tabs.update(t.id, { url, active: false }) : await chrome.tabs.create({ url, active: false });
+  liveNote('Opening ChatGPT in its own tab');
+  const tab = await siteTab('chatgpt', url);
   await new Promise((res) => { const f = (id, info) => { if (id === tab.id && info.status === 'complete') { chrome.tabs.onUpdated.removeListener(f); res(); } }; chrome.tabs.onUpdated.addListener(f); setTimeout(res, 20000); });
   for (let i = 0; i < 20; i++) { try { const p = await chrome.tabs.sendMessage(tab.id, { type: 'ping' }); if (p?.ready) return tab.id; } catch { /* page still loading */ } await sleep(1000); }
   throw new Error('ChatGPT did not load. Are you signed in, and is the project link right?');
@@ -135,7 +207,8 @@ async function researchOne(lead) {
   busy = true; const box = $('work-area'); box.replaceChildren(el('div', { class: 'card' }, `Researching ${lead.first_name} ${lead.last_name}…`));
   try {
     if (!cfg.token || !cfg.project) throw new Error('Add the CRM API key and the ChatGPT project link in Settings first.');
-    if (!lead.website && !lead.hydrated) { const full = (await crm('GET', `/api/leads/${lead.id}`)).lead; Object.assign(lead, full, { hydrated: true }); }
+    livePlan(`Researching ${lead.first_name} ${lead.last_name}`, ['LinkedIn status first: accepted or pending? last activity, conversation', 'Website (only if not read recently)', 'Webmail (only if not searched recently)', 'Ask ChatGPT (new or saved chat)', 'Read the answer, show the preview']);
+    if (!lead.hydrated) { const full = (await crm('GET', `/api/leads/${lead.id}`)).lead; Object.assign(lead, full, { hydrated: true }); }
     if (cfg.deep !== false && !deepInfo[lead.id]) {
       const d = await deepCheck(lead);
       findings[lead.id] = d.text + (findings[lead.id] ? '\n' + findings[lead.id] : '');
@@ -157,16 +230,31 @@ async function researchOne(lead) {
       if (findings[lead.id]) prompt = prompt.replace('Anything else I noticed:', 'Anything else I noticed:\n' + findings[lead.id]);
     }
     log(`Asking ChatGPT about ${lead.first_name} ${lead.last_name}…`);
+    liveAt(3, chatLink ? 'Opening this lead\'s saved ChatGPT chat and sending only what is new' : 'Opening a new chat in the ChatGPT project, pasting the rules and the lead prompt');
     const tabId = await chatTab(chatUrl);
-    const r = await chrome.tabs.sendMessage(tabId, { type: 'ask', prompt });
+    $('live-read').style.display = '';
+    const manual = new Promise((res) => { manualResolve = res; });
+    const r = await Promise.race([chrome.tabs.sendMessage(tabId, { type: 'ask', prompt }), manual]); manualResolve = null; $('live-read').style.display = 'none';
     if (!r?.ok) throw new Error(r?.error || 'No answer from ChatGPT');
     if (r.url && /\/c\//.test(r.url)) { try { await crm('POST', `/api/leads/${lead.id}/links`, { url: r.url, kind: 'chatgpt', label: 'ChatGPT research' }); log('ChatGPT chat link saved on the lead', 'ok'); } catch (e) { if (!/already added/i.test(e.message)) log('Could not save the ChatGPT chat link: ' + e.message, 'err'); } } else log('ChatGPT answered, but its chat link was not visible, so it was not saved', 'err');
-    const data = extractJson(r.text);
-    if (!data) { box.replaceChildren(card(lead, null, r)); box.scrollIntoView({ behavior: 'smooth', block: 'start' }); log('ChatGPT answered without the JSON block. Press "Ask ChatGPT for the JSON block" on the card.', 'err'); return false; }
-    box.replaceChildren(card(lead, data, r));
+    liveAt(4, 'ChatGPT answered, reading the JSON block');
+    let data = extractJson(r.text);
+    if (!data && cfg.autosave !== false) { // ChatGPT forgot the JSON block: ask for it once, by itself
+      liveNote('The answer had no JSON block, asking ChatGPT for it');
+      try { const r2 = await chrome.tabs.sendMessage(tabId, { type: 'ask', prompt: 'Send ONLY the machine-readable json block for this lead, exactly as specified in the MACHINE BLOCK section. One code block tagged json and nothing else.' }); if (r2?.ok) { data = extractJson(r2.text); if (data) r.text += '\n\n' + r2.text; } } catch { /* shown below */ }
+    }
+    if (!data) { liveEnd('ChatGPT gave no JSON block. Skipped, nothing saved.'); box.replaceChildren(card(lead, null, r)); box.scrollIntoView({ behavior: 'smooth', block: 'start' }); log('ChatGPT answered without the JSON block. Press "Ask ChatGPT for the JSON block" on the card.', 'err'); return false; }
+    const c = card(lead, data, r); box.replaceChildren(c);
+    if (cfg.autosave !== false) {
+      liveAt(4, 'Saving the result to the CRM (nothing is sent)');
+      const saved = await c._doSave();
+      liveEnd(saved ? 'Saved to the CRM. Drafts are ready in the list below. Nothing was sent.' : 'Could not save. Fix the problem shown in the card, then press Save to CRM.');
+      return saved;
+    }
     box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    liveEnd('Preview is ready below. Check it, edit if needed, then Save to CRM.');
     return true;
-  } catch (e) { box.replaceChildren(el('div', { class: 'card err' }, e.message)); log(e.message, 'err'); return false; }
+  } catch (e) { box.replaceChildren(el('div', { class: 'card err' }, e.message)); log(e.message, 'err'); liveEnd('Stopped: ' + e.message); return false; }
   finally { busy = false; }
 }
 
@@ -193,7 +281,7 @@ function card(lead, data, r) {
     } catch (e) { reaskBtn.disabled = false; reaskBtn.textContent = 'Ask ChatGPT for the JSON block'; log(e.message, 'err'); }
   } }, 'Ask ChatGPT for the JSON block');
   const skipBtn = el('button', { onclick: () => { document.getElementById('lead' + lead.id)?.remove(); $('work-area').replaceChildren(); log(`Skipped ${lead.first_name} ${lead.last_name} (nothing saved)`); } }, 'Skip, do not save');
-  const saveBtn = el('button', { class: 'primary', onclick: async () => {
+  const doSave = async () => {
     saveBtn.disabled = true;
     try {
       const body = { verdict: verdict.value, reason: reason.value, assessment: assessment.value, why_in_pipeline: why.value, todays_question: d.todays_question || '', next_action: next.value, next_action_days: Number(days.value), denial_reason: d.denial_reason || '', quality: qualitySel.value, lead_category: categorySel.value, channel: channelSel.value, outreach_status: d.outreach_status || '', research_summary: d.research_summary || '', rules_version: setup.version || '', checked: [...new Set([...(d.checked || []), ...(deepInfo[lead.id]?.checked || [])])],
@@ -203,12 +291,17 @@ function card(lead, data, r) {
       const saved = res.saved || [];
       out.replaceChildren(el('div', { class: 'ok' }, `Saved to the CRM (${res.drafts} drafts, ${res.links} links). Nothing was sent.`), ...quickLinks(lead, saved),
         ['PURSUE', 'QUALIFY'].includes(res.verdict) ? el('div', { class: 'row' }, el('button', { onclick: async (ev) => { try { await crm('POST', `/api/leads/${lead.id}/ceo-submit`, { note: body.reason }); ev.target.disabled = true; ev.target.textContent = 'Sent to CEO'; log(`${lead.first_name} ${lead.last_name} sent to the CEO`, 'ok'); } catch (e) { log(e.message, 'err'); } } }, 'Send lead to CEO')) : null,
-        el('div', { class: 'muted' }, d.needs_human ? 'Check by hand: ' + d.needs_human : ''));
+        logRow(lead), el('div', { class: 'muted' }, d.needs_human ? 'Check by hand: ' + d.needs_human : ''));
       refreshTargets();
       saveBtn.remove(); skipBtn.remove(); document.getElementById('lead' + lead.id)?.remove();
-    } catch (e) { saveBtn.disabled = false; log(e.message, 'err'); out.replaceChildren(el('div', { class: 'err' }, e.message)); }
-  } }, 'Save to CRM');
-  return el('div', { class: 'card' },
+      // keep a line for every finished lead, so the next lead in a batch does not hide this one's quick links
+      const dn = $('done'); if (dn.classList.contains('muted')) { dn.classList.remove('muted'); dn.replaceChildren(); }
+      dn.prepend(el('div', { class: 'card' }, el('b', {}, `${lead.first_name} ${lead.last_name}`), ' ', el('span', { class: 'chip ' + res.verdict }, res.verdict), el('div', {}, 'Next: ' + (body.next_action || '-')), ...quickLinks(lead, saved), logRow(lead)));
+      return true;
+    } catch (e) { saveBtn.disabled = false; log(e.message, 'err'); out.replaceChildren(el('div', { class: 'err' }, e.message)); return false; }
+  };
+  const saveBtn = el('button', { class: 'primary', onclick: doSave }, 'Save to CRM');
+  const root = el('div', { class: 'card' },
     el('div', { class: 'row' }, el('b', {}, `${lead.first_name} ${lead.last_name}`), verdict, !data ? el('span', { class: 'chip SKIP' }, 'No JSON block found') : null),
     data ? el('div', {}, 'Reason', reason, 'Assessment line', assessment, 'Why in pipeline', why, el('div', { class: 'row' }, 'Next action', next, 'in days', days), el('div', { class: 'row' }, 'Lead type', qualitySel, 'Category', categorySel, 'Channel', channelSel),
       links ? el('div', {}, el('div', { class: 'muted' }, 'Links to add'), el('pre', {}, links)) : null,
@@ -216,6 +309,8 @@ function card(lead, data, r) {
         z.x.channel === 'linkedin_connect' ? el('div', { class: 'muted' }, 'Connection note limit: 300 characters') : null)),
       d.needs_human ? el('div', { class: 'muted' }, 'Check by hand: ' + d.needs_human) : null, el('div', { class: 'row' }, saveBtn, skipBtn)) : el('div', { class: 'row' }, reaskBtn, skipBtn),
     out, el('details', {}, el('summary', {}, 'Full ChatGPT answer'), el('pre', { style: 'white-space:pre-wrap' }, r.text || '')));
+  root._doSave = doSave;
+  return root;
 }
 
 // Quick links for the human step. The extension opens pages; you review and press send yourself.
@@ -235,18 +330,25 @@ function quickLinks(lead, drafts) {
 
 async function runBatch() {
   stop = false;
-  const total = leads.length; let i = 0;
+  const total = leads.length; let i = 0, fails = 0;
   for (const l of [...leads]) {
-    if (stop) break;
+    if (stop || stopRun) break;
     batchInfo = `Lead ${++i} of ${total}`;
     const ok = await researchOne(l);
-    if (!ok) break; // stop at the first problem so a person looks at it
-    // wait for the person to save or skip this lead before moving on
-    await new Promise((res) => { const t = setInterval(() => { if (!document.getElementById('lead' + l.id) || stop) { clearInterval(t); res(); } }, 800); });
-    if (stop) break;
-    log(`Waiting ${cfg.pause}s before the next lead`); await sleep(Math.max(5, Number(cfg.pause) || 30) * 1000 + Math.random() * 8000);
+    if (stop || stopRun) break;
+    if (!ok) { // one bad lead does not stop the batch; three in a row do
+      if (++fails >= 3) { log('Three leads in a row failed. Stopping so a person can look.', 'err'); break; }
+      continue;
+    }
+    fails = 0;
+    if (cfg.autosave === false) { // manual mode: wait for the person to save or skip this lead
+      await new Promise((res) => { const t = setInterval(() => { if (!document.getElementById('lead' + l.id) || stop) { clearInterval(t); res(); } }, 800); });
+      if (stop) break;
+    }
+    $('live-stop').style.display = ''; // keep Stop available between leads
+    if (i < total) { log(`Waiting ${cfg.pause}s before the next lead`); liveNote(`Waiting ${cfg.pause}s before the next lead, like a person would`); await sleep(Math.max(5, Number(cfg.pause) || 30) * 1000 + Math.random() * 8000); }
   }
-  batchInfo = ''; setStatus(''); log('Batch finished or stopped');
+  batchInfo = ''; setStatus(''); log('Batch finished or stopped', 'ok'); if (typeof liveEnd === 'function') liveEnd(`Batch finished: ${i} of ${total} leads processed`);
 }
 $('ver').textContent = 'v' + chrome.runtime.getManifest().version;
 loadCfg();

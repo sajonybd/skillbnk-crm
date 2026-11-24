@@ -23,15 +23,25 @@
     <select id="owner"><option value="me">My leads</option><option value="">Everyone</option></select>
     <input id="pause" type="number" min="5" value="30" style="width:70px" title="Seconds to wait between leads"> <span class="muted">sec between leads</span></div>
   <div class="row"><label><input type="checkbox" id="setup" style="width:auto"> Put the master prompt (rulebook) at the start of every new chat</label></div>
+  <div class="row"><label><input type="checkbox" id="hidedone" style="width:auto"> Hide leads that are not due yet or were already researched today</label></div>
+  <div class="row"><label><input type="checkbox" id="autosave" style="width:auto"> Save the ChatGPT result to the CRM automatically (nothing is ever sent)</label></div>
   <div class="row"><label><input type="checkbox" id="deep" style="width:auto"> Check website, LinkedIn, webmail before asking ChatGPT</label></div>
-  <div class="row"><button id="save">Save settings</button><button id="master">Copy master prompt</button><span class="muted">Put it in the ChatGPT project once (instructions or a project file).</span></div>
+  <div class="row"><button id="save">Save settings</button></div>
 </details>
 <div class="row"><button id="sweep">Run daily sweep</button><span class="muted">Reads sent invitations, the LinkedIn inbox list (and webmail soon). Read-only.</span></div>
 <div id="sweep-out" class="muted"></div>
 <div class="row"><button id="load" class="primary">Load leads</button><span id="count" class="muted"></span></div>
 <div id="targets" class="card muted">Today's targets load here</div>
+<div id="live" class="card" style="display:none;position:sticky;top:0;z-index:5;background:#fff;border-color:#2563eb">
+  <div class="row" style="justify-content:space-between;margin:0"><b id="live-title"></b><span><button id="live-read" style="display:none" title="Use this if ChatGPT already answered but the extension is still waiting">Read the answer now</button> <button id="live-stop" style="display:none">Stop</button></span></div>
+  <div id="live-steps"></div>
+  <div id="live-now" class="muted" style="margin-top:4px"></div>
+  <div id="live-tabs" class="row"></div>
+  <details><summary class="muted">What was done (history)</summary><div id="live-hist" style="max-height:180px;overflow:auto;font-size:12px"></div></details>
+</div>
 <div id="status" class="card" style="display:none"></div>
 <div id="work-area"></div>
+<h2>Finished and saved</h2><div id="done" class="muted">Nothing yet.</div>
 <div id="queue"></div>
 <h2>Log</h2><div id="log"></div>
 <script src="sidepanel.js"></script>

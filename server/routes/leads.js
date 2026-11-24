@@ -960,9 +960,14 @@ export function leadsRoutes(db) {
     if (type === 'note' && !text) throw new HttpError(400, 'Write a note first');
     if (type === 'website_contact' && text.length < 15) throw new HttpError(400, 'Paste the form link and the confirmation the website showed');
     if (type === 'website_research' && text.length < 15) throw new HttpError(400, 'Write what you found on the website (what they do, size, any LMS or platform)');
+    // Website research counts once per lead per day, the same way a profile review does (a re-run of the same research must not raise the target).
+    if (type === 'website_research') {
+      const day = rangeBounds('today');
+      if (db.prepare('SELECT 1 FROM activities WHERE lead_id = ? AND type = ? AND created_at >= ? AND created_at < ?').get(lead.id, 'website_research', day.start, day.end)) return res.json({ ok: true, duplicate: true, counted: false });
+    }
     const added = tx(db, () => recordActivity(lead, type, text, req.user));
     if (!added) return res.json({ ok: true, duplicate: true });
-    res.status(201).json({ ok: true });
+    res.status(201).json({ ok: true, counted: true });
   });
 
   // Admin only: remove one wrongly logged activity. The lead's "last activity" is recalculated.
