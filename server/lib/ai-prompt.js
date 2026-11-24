@@ -86,6 +86,31 @@ HOW TO WORK
 
 Reply "Ready" and wait for the first lead.`;
 
+// Added to a lead prompt for the browser extension: a fixed JSON block at the very end that the extension saves to the CRM after a person reviews it.
+export const MACHINE_BLOCK = `
+
+=== MACHINE BLOCK (for the CRM extension) ===
+After your F line, end the answer with ONE code block tagged json and nothing after it. Use exactly these keys. Use "" or [] when unknown. Never invent a link, email or fact.
+\`\`\`json
+{
+  "verdict": "PURSUE | QUALIFY | NURTURE | SKIP",
+  "reason": "one line",
+  "assessment": "VERDICT - reason | Pays: ... | Learner price: ... | Headcount: ... | Platform: ...",
+  "why_in_pipeline": "",
+  "todays_question": "",
+  "next_action": "one action in plain words",
+  "next_action_days": 0,
+  "denial_reason": "only for SKIP",
+  "links": [{"kind": "booking | contact | other", "url": "https://...", "label": ""}],
+  "drafts": [{"channel": "linkedin_connect | linkedin_dm | linkedin_comment | linkedin_followup | email | website_contact", "subject": "email only", "body": "the exact text, Shiblu voice", "target_url": "needed for comments and Contact Us forms", "note": ""}],
+  "research_summary": "5 to 8 short lines a person or AI can read later instead of redoing the research: what they do, headcount, platform, buyer, location, history with us",
+  "checked": ["website", "linkedin", "inbox", "email"],
+  "needs_human": "which inbox or page a person must still check"
+}
+\`\`\`
+Rules: a connection note is 300 characters or fewer. A comment draft needs the direct post link. A Contact Us draft needs the form page link. Write drafts only when sending is the right next step.
+=== END MACHINE BLOCK ===`;
+
 // Setup text. The admin's saved Playbook text wins when it looks like the full rulebook; otherwise the built-in v8 copy is used.
 export function buildSetup({ playbook }) {
   const custom = playbook && playbook.length > 6000 && /H1\b/.test(playbook);
@@ -99,7 +124,7 @@ ${rules}
   return { prompt, chars: prompt.length, rules_source: source };
 }
 
-export function buildLeadPrompt({ lead: l, fit, guide, activities, meetings, links }) {
+export function buildLeadPrompt({ lead: l, fit, guide, activities, meetings, links, machine = false }) {
   const name = [l.first_name, l.last_name].filter(Boolean).join(' ') || '(no name)';
   const where = [l.city, l.state, l.country].filter(Boolean).join(', ');
   const L = [];
@@ -110,6 +135,9 @@ export function buildLeadPrompt({ lead: l, fit, guide, activities, meetings, lin
     `Channel: ${v(l.channel)}`, `CRM owner: ${v(l.owner_name)}`, `Why in pipeline: ${v(l.why_in_pipeline)}`, `Assessment so far: ${v(l.assessment)}`,
     `Today's question: ${v(l.todays_question)}`, `Denial reason: ${v(l.denial_reason)}`, `Next action: ${l.next_action || l.next_action_date ? [l.next_action, l.next_action_date && '(' + l.next_action_date + ')'].filter(Boolean).join(' ') : 'not in CRM'}`,
     `Invite sent: ${v(l.invite_sent_date)} | Accepted: ${v(l.accepted_date)} | First DM: ${v(l.first_dm_date)}`, `Notes: ${v(l.notes)}`);
+  if (l.research_summary) L.push('', `ALREADY RESEARCHED (${String(l.research_at).slice(0, 10)}). Do not redo this. Check only what is new:`, l.research_summary,
+    `Last checked: website ${String(l.website_checked_at).slice(0, 10) || 'never'}, LinkedIn ${String(l.linkedin_checked_at).slice(0, 10) || 'never'}, inbox ${String(l.inbox_checked_at).slice(0, 10) || 'never'}, email ${String(l.email_checked_at).slice(0, 10) || 'never'}`);
+  if (l.needs_review) L.push('', `NEW SINCE THE LAST CHECK: ${l.needs_review} (${String(l.needs_review_at).slice(0, 10)}). Start from this.`);
   if (links.length) L.push('', 'Saved links:', ...links.map((k) => `- ${k.label || k.kind}: ${k.url}`));
   L.push('', 'CRM fit hint (a suggestion from headcount and job title, plus place and training signals for information; not a verdict. Location never qualifies a lead):', fit ? `- ${fit.size_text}\n- ${fit.auth_text}\n- Place: ${fit.loc_text}\n- Training: ${fit.train_text}${fit.nonprofit ? '\n- Nonprofit: ' + fit.np_text : ''}\n- Suggestion: ${fit.suggest.toUpperCase()} (${fit.why})` : '- none');
   if (guide) {
@@ -135,6 +163,6 @@ Who decides / buyer:
 Inbox history (regular and Sales Navigator):
 Anything else I noticed:
 
-=== END OF LEAD ===`;
+=== END OF LEAD ===${machine ? MACHINE_BLOCK : ''}`;
   return { prompt, chars: prompt.length, lead_id: l.id };
 }

@@ -754,3 +754,55 @@ test('per-lead CEO approval unlocks every step; booking and contact links are de
   assert.equal((await call('POST', `/api/leads/drafts/${d2.id}/sent`, {}, ck)).draft.status, 'sent');
   assert.equal((await call('GET', '/api/leads/ceo-queue')).rows.some((r) => r.id === lead), false);
 });
+
+test('ai-result: one call saves verdict, links and drafts; nothing is sent; bad input is rejected', async () => {
+  const lead = (await call('POST', '/api/leads', { first_name: 'Ana', last_name: 'Result', company: 'ResultCo', email: 'ana@resultco.test' })).id;
+  assert.equal((await call('POST', `/api/leads/${lead}/ai-result`, { verdict: 'MAYBE' })).status, 400);
+  const out = await call('POST', `/api/leads/${lead}/ai-result`, {
+    verdict: 'qualify', reason: 'Runs cohort classes, 12 staff', next_action: 'Connect with a note', next_action_days: 0,
+    links: [{ kind: 'booking', url: 'https://calendly.com/ana/intro' }, { url: 'resultco.test/contact' }, { url: 'not a link' }],
+    drafts: [
+      { channel: 'linkedin_connect', body: 'Hi Ana, I saw your cohort classes. Fellow founder here.' },
+      { channel: 'linkedin_connect', body: 'x'.repeat(301) },
+      { channel: 'website_contact', body: 'Hello from the form' },
+      { channel: 'email', subject: 'Question', body: 'How do you track skills sign-offs?' },
+    ],
+  });
+  assert.equal(out.ok, true);
+  assert.equal(out.verdict, 'QUALIFY');
+  assert.equal(out.links, 2);
+  assert.equal(out.drafts, 2);
+  assert.equal(out.skipped.length >= 3, true);
+  const det = await call('GET', `/api/leads/${lead}`);
+  assert.match(det.lead.assessment, /^QUALIFY/);
+  assert.equal(det.lead.next_action, 'Connect with a note');
+  assert.ok(det.links.some((k) => k.kind === 'booking') && det.links.some((k) => k.kind === 'contact'));
+  assert.equal(det.drafts.length, 2);
+  assert.ok(!det.activities.some((a) => ['linkedin_connect', 'email'].includes(a.type)));
+  // same result twice does not double the drafts
+  assert.equal((await call('POST', `/api/leads/${lead}/ai-result`, { verdict: 'QUALIFY', reason: 'again', drafts: [{ channel: 'email', subject: 'Question', body: 'How do you track skills sign-offs?' }] })).duplicates, 1);
+  const pr = await call('GET', `/api/leads/${lead}/ai-prompt?machine=1`);
+  assert.match(pr.prompt, /MACHINE BLOCK/);
+  assert.doesNotMatch((await call('GET', `/api/leads/${lead}/ai-prompt`)).prompt, /MACHINE BLOCK/);
+});
+
+test('research memory: summary and checked dates are saved, shown in the next prompt; daily signals mark leads for review', async () => {
+  const lead = (await call('POST', '/api/leads', { first_name: 'Mia', last_name: 'Memory', company: 'MemoCo', email: 'mia@memoco.test' })).id;
+  await call('POST', `/api/leads/${lead}/ai-result`, { verdict: 'QUALIFY', reason: 'Cohort classes', research_summary: 'Runs CNA cohorts, 12 staff, no LMS seen, owner is the buyer.', checked: ['website', 'inbox', 'bogus'] });
+  let det = await call('GET', `/api/leads/${lead}`);
+  assert.match(det.lead.research_summary, /CNA cohorts/);
+  assert.notEqual(det.lead.website_checked_at, '');
+  assert.equal(det.lead.linkedin_checked_at, '');
+  assert.match((await call('GET', `/api/leads/${lead}/ai-prompt`)).prompt, /ALREADY RESEARCHED[\s\S]*CNA cohorts/);
+  const sig = await call('POST', '/api/leads/signals', { items: [{ lead_id: lead, type: 'invite_accepted' }, { lead_id: lead, type: 'new_message', text: 'Thanks, tell me more' }, { lead_id: 999999, type: 'new_post' }, { lead_id: lead, type: 'nonsense' }] });
+  assert.equal(sig.marked, 2); assert.equal(sig.skipped.length, 2);
+  det = await call('GET', `/api/leads/${lead}`);
+  assert.match(det.lead.needs_review, /New LinkedIn message/);
+  assert.notEqual(det.lead.accepted_date, '');
+  assert.equal(det.lead.stage === 'Contacted' || det.lead.stage === 'New', true);
+  assert.match((await call('GET', `/api/leads/${lead}/ai-prompt`)).prompt, /NEW SINCE THE LAST CHECK: New LinkedIn message/);
+  assert.equal((await call('GET', '/api/leads?needs_review=1')).rows.some((x) => x.id === lead), true);
+  // saving a fresh research result clears the flag
+  await call('POST', `/api/leads/${lead}/ai-result`, { verdict: 'QUALIFY', reason: 'Re-checked', checked: ['inbox'] });
+  assert.equal((await call('GET', `/api/leads/${lead}`)).lead.needs_review, '');
+});

@@ -203,7 +203,9 @@ export async function openLead(id, ctx, onChange = () => {}) {
     const isAdmin = ctx.user.role === 'admin';
     const note = h('input', { placeholder: st === 'submitted' && isAdmin ? 'Comment (needed for changes)' : 'Why this lead, and the plan (optional)' });
     const go = (path, body, msg) => async () => { try { await api('POST', `/api/leads/${id}/${path}`, body()); changed = true; toast(msg); load(); } catch (e) { toast(e.message, true); } };
-    return h('section', null, h('h3', null, 'CEO review'),
+    return h('section', null, l.needs_review ? h('div', { class: 'card', style: 'padding:8px;margin-bottom:8px;border-left:3px solid #f5a524' }, h('b', null, 'New since the last check: '), l.needs_review, h('span', { class: 'muted' }, ' · ' + timeAgo(l.needs_review_at))) : null,
+      l.research_summary ? h('details', { style: 'margin-bottom:8px' }, h('summary', { style: 'cursor:pointer' }, `Research summary (${String(l.research_at).slice(0, 10)})`), h('div', { style: 'white-space:pre-wrap;margin-top:4px' }, l.research_summary)) : null,
+      h('h3', null, 'CEO review'),
       h('div', { class: 'row', style: 'gap:8px;align-items:center;flex-wrap:wrap' }, label ? h('span', { class: 'chip noav ' + label[1] }, label[0]) : h('span', { class: 'muted' }, 'Not sent to the CEO yet'),
         l.ceo_by_name && st ? h('span', { class: 'muted' }, `${l.ceo_by_name} · ${timeAgo(l.ceo_at)}`) : null),
       l.ceo_note ? h('div', { class: 'muted', style: 'margin-top:4px' }, l.ceo_note) : null,

@@ -147,6 +147,7 @@ export function leadsRoutes(db) {
       if (q[f] === 'none') where.push(`l.${f} = ''`);
       else if (q[f]) { where.push(`l.${f} = ?`); params.push(q[f]); }
     }
+    if (q.needs_review === '1') where.push("l.needs_review != ''");
     if (q.followup === 'due') { where.push("l.next_action_date != '' AND l.next_action_date <= ?"); params.push(todayLocal()); }
     if (q.quality === 'none') where.push("l.quality = ''");
     else if (q.quality) { where.push('l.quality = ?'); params.push(q.quality); }
@@ -598,6 +599,28 @@ export function leadsRoutes(db) {
     res.json({ rows });
   });
 
+  // The extension's daily sweep: what changed since the last check (invite accepted, new message, email reply, new post).
+  // It logs a note, marks the lead "needs review" with the reason, and fills the accepted date. It never changes the stage or sends anything.
+  const SIGNALS = { invite_accepted: 'Invite accepted', invite_pending: 'Invite still pending', new_message: 'New LinkedIn message', email_reply: 'New email', new_post: 'New LinkedIn post' };
+  r.post('/signals', (req, res) => {
+    const items = Array.isArray(req.body?.items) ? req.body.items.slice(0, 200) : [];
+    let marked = 0; const skipped = [];
+    for (const it of items) {
+      const lead = db.prepare('SELECT * FROM leads WHERE id = ? AND deleted_at = \'\'').get(Number(it?.lead_id));
+      if (!lead || !SIGNALS[it?.type]) { skipped.push(String(it?.lead_id)); continue; }
+      const text = String(it.text || '').trim().slice(0, 500);
+      const now = new Date().toISOString();
+      tx(db, () => {
+        logActivity(db, { lead_id: lead.id, user_id: req.user.id, type: 'note', note: `Check: ${SIGNALS[it.type]}${text ? ' - ' + text : ''}` });
+        if (it.type === 'invite_accepted') { if (!lead.accepted_date) recordActivity(lead, 'linkedin_connected', 'Connection accepted (seen by the daily check)', req.user); }
+        if (it.type !== 'invite_pending') db.prepare('UPDATE leads SET needs_review = ?, needs_review_at = ?, updated_at = ? WHERE id = ?').run(SIGNALS[it.type] + (text ? ': ' + text.slice(0, 120) : ''), now, now, lead.id);
+        else db.prepare('UPDATE leads SET linkedin_checked_at = ? WHERE id = ?').run(now, lead.id);
+      });
+      if (it.type !== 'invite_pending') marked++;
+    }
+    res.json({ ok: true, marked, skipped });
+  });
+
   // Per-lead CEO review: submit a qualified lead with its plan; the CEO approves once or asks for changes.
   r.get('/ceo-queue', (req, res) => {
     const rows = db.prepare(`SELECT l.id, TRIM(l.first_name || ' ' || l.last_name) AS name, l.company, l.title, l.assessment, l.why_in_pipeline, l.next_action, l.ceo_status, l.ceo_note, l.ceo_at, u.name AS owner_name
@@ -662,7 +685,7 @@ export function leadsRoutes(db) {
     const links = db.prepare('SELECT kind, label, url FROM lead_links WHERE lead_id = ? ORDER BY id').all(id);
     const fit = fitOf(lead);
     const guide = guideOf(lead, { fit, counts: countsFor(db, id), today: todayLocal(), rules: getRules(db), meetings });
-    res.json(buildLeadPrompt({ lead, fit, guide, activities, meetings, links }));
+    res.json(buildLeadPrompt({ lead, fit, guide, activities, meetings, links, machine: req.query.machine === '1' }));
   });
 
   const liveLead = (id) => {
@@ -815,25 +838,78 @@ export function leadsRoutes(db) {
 
 
   // Add a draft to a lead (a person or an AI agent with an API key). Creating a draft never sends anything.
-  r.post('/:id/drafts', (req, res) => {
-    const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(Number(req.params.id));
-    if (!lead) throw new HttpError(404, 'Lead not found');
-    if (lead.deleted_at) throw new HttpError(400, 'This lead is in the recycle bin. Restore it first.');
-    const f = cleanDraft(req.body || {}, { partial: false });
+  function addDraft(lead, input, user) {
+    const f = cleanDraft(input || {}, { partial: false });
     checkConnectNote(f.channel, f.body);
     if (['linkedin_comment', 'linkedin_comment_reply'].includes(f.channel) && !f.target_url) throw new HttpError(400, 'A comment draft needs the direct link (target_url) to the exact post. Find the post first.');
     if (f.channel === 'website_contact' && !f.target_url) throw new HttpError(400, 'A Contact Us draft needs the link (target_url) to the form page');
     const dup = db.prepare("SELECT id FROM drafts WHERE lead_id = ? AND channel = ? AND body = ? AND status = 'ready'").get(lead.id, f.channel, f.body);
-    if (dup) return res.json({ draft: draftOne(dup.id), duplicate: true });
+    if (dup) return { draft: draftOne(dup.id), duplicate: true };
     const now = new Date().toISOString();
     const id = tx(db, () => {
       const ins = db.prepare('INSERT INTO drafts(lead_id, channel, subject, body, note, target_url, send_window, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
-        .run(lead.id, f.channel, f.subject || '', f.body, f.note || '', f.target_url || '', f.send_window || DRAFT_SEND_WINDOW, 'ready', req.user.id, now, now);
-      logActivity(db, { lead_id: lead.id, user_id: req.user.id, type: 'note', note: `Draft ready (${DRAFT_CHANNELS[f.channel]}), NOT sent: ${preview(f.body)}` });
-      draftEvent(Number(ins.lastInsertRowid), req.user, 'created');
+        .run(lead.id, f.channel, f.subject || '', f.body, f.note || '', f.target_url || '', f.send_window || DRAFT_SEND_WINDOW, 'ready', user.id, now, now);
+      logActivity(db, { lead_id: lead.id, user_id: user.id, type: 'note', note: `Draft ready (${DRAFT_CHANNELS[f.channel]}), NOT sent: ${preview(f.body)}` });
+      draftEvent(Number(ins.lastInsertRowid), user, 'created');
       return Number(ins.lastInsertRowid);
     });
-    res.status(201).json({ draft: draftOne(id) });
+    return { draft: draftOne(id) };
+  }
+  r.post('/:id/drafts', (req, res) => {
+    const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(Number(req.params.id));
+    if (!lead) throw new HttpError(404, 'Lead not found');
+    if (lead.deleted_at) throw new HttpError(400, 'This lead is in the recycle bin. Restore it first.');
+    const out = addDraft(lead, req.body, req.user);
+    res.status(out.duplicate ? 200 : 201).json(out);
+  });
+
+  // The browser extension (or any AI agent) saves one researched lead in a single call. Nothing is sent and the stage never changes:
+  // it fills the research fields, adds links, and stores drafts as "ready". A person reviews first (the extension shows a preview).
+  const VERDICTS = ['PURSUE', 'QUALIFY', 'NURTURE', 'SKIP'];
+  r.post('/:id/ai-result', (req, res) => {
+    const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(Number(req.params.id));
+    if (!lead) throw new HttpError(404, 'Lead not found');
+    if (lead.deleted_at) throw new HttpError(400, 'This lead is in the recycle bin. Restore it first.');
+    const b = req.body || {};
+    const verdict = String(b.verdict || '').toUpperCase().trim();
+    if (!VERDICTS.includes(verdict)) throw new HttpError(400, 'verdict must be one of: ' + VERDICTS.join(', '));
+    const clip = (x, n) => String(x ?? '').replace(/\r\n/g, '\n').trim().slice(0, n);
+    const reason = clip(b.reason, 400);
+    let assessment = clip(b.assessment, 1500);
+    if (!new RegExp('^' + verdict, 'i').test(assessment)) assessment = `${verdict} - ${reason}${assessment ? ' | ' + assessment : ''}`.slice(0, 1500);
+    const sets = { assessment };
+    if (clip(b.why_in_pipeline, 1000)) sets.why_in_pipeline = clip(b.why_in_pipeline, 1000);
+    if (clip(b.todays_question, 500)) sets.todays_question = clip(b.todays_question, 500);
+    if (clip(b.next_action, 300)) sets.next_action = clip(b.next_action, 300);
+    const days = Number(b.next_action_days);
+    if (Number.isFinite(days) && days >= 0 && days <= 60) sets.next_action_date = addDays(todayLocal(), Math.round(days));
+    if (verdict === 'SKIP' && clip(b.denial_reason, 300)) sets.denial_reason = clip(b.denial_reason, 300);
+    const added = { links: 0, drafts: 0, duplicates: 0, skipped: [] };
+    const now = new Date().toISOString();
+    // Memory for the next person or AI: a short summary and when each source was last checked. A re-check clears "needs review".
+    if (clip(b.research_summary, 1500)) { sets.research_summary = clip(b.research_summary, 1500); sets.research_at = now; }
+    const SOURCES = { website: 'website_checked_at', linkedin: 'linkedin_checked_at', inbox: 'inbox_checked_at', email: 'email_checked_at' };
+    for (const s of Array.isArray(b.checked) ? b.checked : []) if (SOURCES[s]) sets[SOURCES[s]] = now;
+    sets.needs_review = ''; sets.needs_review_at = '';
+    tx(db, () => {
+      const cols = Object.keys(sets);
+      db.prepare(`UPDATE leads SET ${cols.map((c) => c + ' = ?').join(', ')}, updated_at = ? WHERE id = ?`).run(...cols.map((c) => sets[c]), now, lead.id);
+      logActivity(db, { lead_id: lead.id, user_id: req.user.id, type: 'note', note: `AI research saved by ${req.user.name}: ${verdict} - ${reason}`.slice(0, 600) });
+      for (const k of Array.isArray(b.links) ? b.links.slice(0, 10) : []) {
+        try {
+          const url = cleanUrl(k?.url);
+          const kind = isKind(k?.kind) ? k.kind : detectKind(url);
+          if (db.prepare('SELECT 1 FROM lead_links WHERE lead_id = ? AND url = ?').get(lead.id, url)) continue;
+          if (db.prepare('SELECT COUNT(*) AS n FROM lead_links WHERE lead_id = ?').get(lead.id).n >= 30) { added.skipped.push('link limit'); break; }
+          db.prepare('INSERT INTO lead_links(lead_id, kind, label, url, created_by, created_at) VALUES (?,?,?,?,?,?)').run(lead.id, kind, clip(k?.label, 80), url, req.user.id, now);
+          added.links++;
+        } catch (e) { added.skipped.push('link: ' + e.message); }
+      }
+    });
+    for (const d of Array.isArray(b.drafts) ? b.drafts.slice(0, 6) : []) {
+      try { const out = addDraft(lead, d, req.user); if (out.duplicate) added.duplicates++; else added.drafts++; } catch (e) { added.skipped.push('draft: ' + e.message); }
+    }
+    res.json({ ok: true, verdict, ...added, lead_id: lead.id });
   });
 
   // The person sent it: log the real activity (with the text) and close the draft.

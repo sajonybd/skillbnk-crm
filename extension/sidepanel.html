@@ -1,0 +1,32 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>skillBNK Research</title>
+<style>
+  body{font:13px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:10px;color:#1c2024}
+  h2{font-size:14px;margin:12px 0 6px} .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
+  input,select,textarea{font:inherit;padding:5px 7px;border:1px solid #cdd3da;border-radius:6px;box-sizing:border-box}
+  input,textarea{width:100%} textarea{min-height:70px}
+  button{font:inherit;padding:5px 10px;border:1px solid #cdd3da;border-radius:6px;background:#fff;cursor:pointer}
+  button.primary{background:#2457d6;color:#fff;border-color:#2457d6} button:disabled{opacity:.5;cursor:default}
+  .card{border:1px solid #dde2e8;border-radius:8px;padding:8px;margin:6px 0} .muted{color:#667}
+  .chip{display:inline-block;padding:1px 8px;border-radius:10px;background:#eef1f5;font-size:12px}
+  .PURSUE{background:#d7f5e0}.QUALIFY{background:#fff1c2}.NURTURE{background:#dbe8ff}.SKIP{background:#ffd9d9}
+  .err{color:#b00020}.ok{color:#0a7a2f} details summary{cursor:pointer} a.btn{text-decoration:none;display:inline-block;padding:5px 10px;border:1px solid #cdd3da;border-radius:6px;color:#1c2024}
+  #log{max-height:90px;overflow:auto;font-size:12px;background:#f6f8fa;border-radius:6px;padding:6px}
+</style></head>
+<body>
+<h2>skillBNK Research Assistant</h2>
+<details id="settings"><summary>Settings</summary>
+  <div class="row"><input id="crm" placeholder="CRM address"></div>
+  <div class="row"><input id="token" type="password" placeholder="CRM API key (starts with sbk_)"></div>
+  <div class="row"><input id="project" placeholder="ChatGPT skillBNK project page link"></div>
+  <div class="row"><select id="work"><option value="changed">Changed since last check</option><option value="research">To research</option><option value="engage">To engage</option><option value="message">Accepted, message due</option><option value="followup">Waiting after message</option><option value="invited">Invite pending</option><option value="replied">Replied</option></select>
+    <select id="owner"><option value="me">My leads</option><option value="">Everyone</option></select>
+    <input id="pause" type="number" min="5" value="30" style="width:70px" title="Seconds to wait between leads"> <span class="muted">sec between leads</span></div>
+  <div class="row"><button id="save">Save settings</button><button id="master">Copy master prompt</button><span class="muted">Put it in the ChatGPT project once (instructions or a project file).</span></div>
+</details>
+<div class="row"><button id="load" class="primary">Load leads</button><span id="count" class="muted"></span></div>
+<div id="queue"></div>
+<div id="work-area"></div>
+<h2>Log</h2><div id="log"></div>
+<script src="sidepanel.js"></script>
+</body></html>
