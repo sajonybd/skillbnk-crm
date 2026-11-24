@@ -893,6 +893,7 @@ export function leadsRoutes(db) {
     if (clip(b.research_summary, 1500)) { sets.research_summary = clip(b.research_summary, 1500); sets.research_at = now; }
     const SOURCES = { website: 'website_checked_at', linkedin: 'linkedin_checked_at', inbox: 'inbox_checked_at', email: 'email_checked_at' };
     for (const s of Array.isArray(b.checked) ? b.checked : []) if (SOURCES[s]) sets[SOURCES[s]] = now;
+    if (clip(b.rules_version, 40)) sets.rules_version = clip(b.rules_version, 40);
     sets.needs_review = ''; sets.needs_review_at = '';
     // Dropdown fields (lead type, category, channel, outreach status): only values the CRM knows. A SKIP with no lead type becomes "Not a Fit",
     // which takes it out of the plan and the research list. The stage is never changed here.

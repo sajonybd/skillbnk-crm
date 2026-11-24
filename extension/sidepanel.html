@@ -22,6 +22,7 @@
   <div class="row"><select id="work"><option value="plan">Today's plan (what is due now)</option><option value="changed">Changed since last check</option><option value="research">To research</option><option value="engage">To engage</option><option value="message">Accepted, message due</option><option value="followup">Waiting after message</option><option value="invited">Invite pending</option><option value="replied">Replied</option></select>
     <select id="owner"><option value="me">My leads</option><option value="">Everyone</option></select>
     <input id="pause" type="number" min="5" value="30" style="width:70px" title="Seconds to wait between leads"> <span class="muted">sec between leads</span></div>
+  <div class="row"><label><input type="checkbox" id="setup" style="width:auto"> Put the master prompt (rulebook) at the start of every new chat</label></div>
   <div class="row"><label><input type="checkbox" id="deep" style="width:auto"> Check website, LinkedIn, webmail before asking ChatGPT</label></div>
   <div class="row"><button id="save">Save settings</button><button id="master">Copy master prompt</button><span class="muted">Put it in the ChatGPT project once (instructions or a project file).</span></div>
 </details>
@@ -30,8 +31,8 @@
 <div class="row"><button id="load" class="primary">Load leads</button><span id="count" class="muted"></span></div>
 <div id="targets" class="card muted">Today's targets load here</div>
 <div id="status" class="card" style="display:none"></div>
-<div id="queue"></div>
 <div id="work-area"></div>
+<div id="queue"></div>
 <h2>Log</h2><div id="log"></div>
 <script src="sidepanel.js"></script>
 <script src="sweep.js"></script>

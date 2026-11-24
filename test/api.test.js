@@ -832,3 +832,12 @@ test('ai-result sets lead type, category, channel; SKIP becomes Not a Fit; unkno
   det = await call('GET', `/api/leads/${s}`);
   assert.equal(det.lead.quality, 'Not a Fit'); assert.equal(det.lead.denial_reason, 'Sells an LLMS'.replace('LLMS', 'LMS')); assert.equal(det.lead.stage, 'New');
 });
+
+test('rulebook version: changes with the rules, is stored per lead with the research', async () => {
+  const v1 = (await call('GET', '/api/leads/ai-setup')).version;
+  assert.match(v1, /^[0-9a-f]{8}$/);
+  assert.equal((await call('GET', '/api/leads/ai-setup')).version, v1);
+  const lead = (await call('POST', '/api/leads', { first_name: 'Ray', last_name: 'Rules', company: 'RulesCo', email: 'ray@rules.test' })).id;
+  await call('POST', `/api/leads/${lead}/ai-result`, { verdict: 'NURTURE', reason: 'later', rules_version: v1 });
+  assert.equal((await call('GET', `/api/leads/${lead}`)).lead.rules_version, v1);
+});

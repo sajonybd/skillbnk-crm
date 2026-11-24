@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { RULES_V8, RULES_VERSION } from '../data/rules-v8.js';
 import { QUALITIES, LEAD_CATEGORIES, CHANNELS } from '../config.js';
 
@@ -125,7 +126,9 @@ export function buildSetup({ playbook }) {
 === RULEBOOK (${source}) ===
 ${rules}
 === END OF RULEBOOK ===`;
-  return { prompt, chars: prompt.length, rules_source: source };
+  // A short code of the exact rulebook text: it changes whenever the rules change, so a chat that saw an older one can be updated.
+  const version = createHash('sha1').update(rules).digest('hex').slice(0, 8);
+  return { prompt, chars: prompt.length, rules_source: source, version };
 }
 
 export function buildLeadPrompt({ lead: l, fit, guide, activities, meetings, links, machine = false }) {

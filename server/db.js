@@ -145,7 +145,7 @@ export function openDb(file) {
   // Outreach funnel fields (Sections 40–42). Added once, existing rows get blanks.
   const OUTREACH_COLS = ['lead_category', 'tier', 'problem_pool', 'why_in_pipeline', 'todays_question', 'outreach_status', 'denial_reason', 'opportunity_path', 'channel', 'assessment', 'invite_sent_date', 'accepted_date', 'first_dm_date'];
   const have = db.prepare('PRAGMA table_info(leads)').all().map((c) => c.name);
-  for (const c of [...OUTREACH_COLS, 'ceo_status', 'ceo_note', 'ceo_at', 'ceo_by_name', 'research_summary', 'research_at', 'website_checked_at', 'linkedin_checked_at', 'inbox_checked_at', 'email_checked_at', 'needs_review', 'needs_review_at']) if (!have.includes(c)) db.exec(`ALTER TABLE leads ADD COLUMN ${c} TEXT NOT NULL DEFAULT ''`);
+  for (const c of [...OUTREACH_COLS, 'ceo_status', 'ceo_note', 'ceo_at', 'ceo_by_name', 'research_summary', 'research_at', 'website_checked_at', 'linkedin_checked_at', 'inbox_checked_at', 'email_checked_at', 'needs_review', 'needs_review_at', 'rules_version']) if (!have.includes(c)) db.exec(`ALTER TABLE leads ADD COLUMN ${c} TEXT NOT NULL DEFAULT ''`);
   db.exec('CREATE INDEX IF NOT EXISTS idx_leads_ostatus ON leads(outreach_status)');
   // "Opportunity path" was merged into Quality (one lead type). Copy old values into blank Quality once; the column stays, unused.
   db.exec(`UPDATE leads SET quality = CASE opportunity_path

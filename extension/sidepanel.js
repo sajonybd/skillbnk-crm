@@ -3,7 +3,12 @@
 const $ = (id) => document.getElementById(id);
 const el = (tag, attrs = {}, ...kids) => { const n = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'class') n.className = v; else if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else if (v !== null && v !== undefined && v !== false) n.setAttribute(k, v === true ? '' : v); } for (const c of kids.flat()) if (c !== null && c !== undefined && c !== false) n.append(c.nodeType ? c : document.createTextNode(String(c))); return n; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-let cfg = { crm: 'https://skillbnk-crm.onrender.com', token: '', project: '', work: 'plan', owner: 'me', pause: 30, deep: true };
+let cfg = { crm: 'https://skillbnk-crm.onrender.com', token: '', project: '', work: 'plan', owner: 'me', pause: 30, deep: true, setup: true };
+let setup = { text: '', version: '', at: 0 }; // the rulebook and its version code; refreshed every 10 minutes so a rules change is picked up
+async function getSetup() {
+  if (!setup.text || Date.now() - setup.at > 600000) { const s = await crm('GET', '/api/leads/ai-setup'); setup = { text: s.prompt.replace(/Reply "Ready"[^\n]*/g, 'The first lead follows in this same message. Answer it now.'), version: s.version, at: Date.now() }; }
+  return setup;
+}
 let appCfg = null; // CRM dropdown values (lead type, category, channel)
 let leads = []; let busy = false; let stop = false; const findings = {}; // lead id -> text the person added
 const deepInfo = {}; // lead id -> { checked: [...], links: [...] } from the automatic check
@@ -40,10 +45,10 @@ async function crm(method, path, body) {
 async function loadCfg() {
   const s = await chrome.storage.local.get('cfg'); cfg = { ...cfg, ...(s.cfg || {}) };
   for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) $(k).value = cfg[k];
-  $('deep').checked = cfg.deep !== false;
+  $('deep').checked = cfg.deep !== false; $('setup').checked = cfg.setup !== false;
   if (!cfg.token || !cfg.project) $('settings').open = true; else { refreshTargets(); try { appCfg = await crm('GET', '/api/config'); } catch { /* the preview then has no dropdown lists */ } }
 }
-$('save').onclick = async () => { for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) cfg[k] = $(k).value.trim(); cfg.deep = $('deep').checked; await chrome.storage.local.set({ cfg }); log('Settings saved', 'ok'); };
+$('save').onclick = async () => { for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) cfg[k] = $(k).value.trim(); cfg.deep = $('deep').checked; cfg.setup = $('setup').checked; await chrome.storage.local.set({ cfg }); log('Settings saved', 'ok'); };
 $('master').onclick = async () => { try { const s = await crm('GET', '/api/leads/ai-setup'); await navigator.clipboard.writeText(s.prompt); log(`Master prompt copied (${s.chars.toLocaleString()} characters). Paste it into the ChatGPT project's instructions, or save it as a .txt file and upload it to the project files.`, 'ok'); } catch (e) { log(e.message, 'err'); } };
 
 $('load').onclick = async () => {
@@ -143,9 +148,12 @@ async function researchOne(lead) {
       // This lead already has its own chat: continue it and send only what is new.
       chatUrl = chatLink;
       prompt = `UPDATE ${new Date().toISOString().slice(0, 10)}. New since the last check: ${detail.lead.needs_review || 'no change flagged, this is a manual re-check'}.\n\n${findings[lead.id] || '(no extra findings)'}\n\nRe-assess this lead from the earlier research plus this update. Answer in the same A to F format, but only say what changed. End with the same machine-readable json block as before, with research_summary updated.`;
+      if (cfg.setup !== false) { const st = await getSetup(); if (detail.lead.rules_version !== st.version) { prompt = `RULES UPDATED. The rulebook below replaces every earlier version of the rules in this chat. Use only this one from now on.\n\n${st.text}\n\n=== END OF UPDATED RULEBOOK ===\n\n` + prompt; log('Rules changed since this chat last saw them: sending the updated rulebook with the update', 'ok'); } }
       log(`Continuing the saved ChatGPT chat for ${lead.first_name} ${lead.last_name} (only what is new)`);
     } else {
       ({ prompt } = await crm('GET', `/api/leads/${lead.id}/ai-prompt?machine=1`));
+      // New chat: the rulebook goes first, in the same message (skip it if the project already holds it).
+      if (cfg.setup !== false) prompt = (await getSetup()).text + '\n\n' + prompt;
       if (findings[lead.id]) prompt = prompt.replace('Anything else I noticed:', 'Anything else I noticed:\n' + findings[lead.id]);
     }
     log(`Asking ChatGPT about ${lead.first_name} ${lead.last_name}…`);
@@ -154,8 +162,9 @@ async function researchOne(lead) {
     if (!r?.ok) throw new Error(r?.error || 'No answer from ChatGPT');
     if (r.url && /\/c\//.test(r.url)) { try { await crm('POST', `/api/leads/${lead.id}/links`, { url: r.url, kind: 'chatgpt', label: 'ChatGPT research' }); log('ChatGPT chat link saved on the lead', 'ok'); } catch (e) { if (!/already added/i.test(e.message)) log('Could not save the ChatGPT chat link: ' + e.message, 'err'); } } else log('ChatGPT answered, but its chat link was not visible, so it was not saved', 'err');
     const data = extractJson(r.text);
-    if (!data) { box.replaceChildren(card(lead, null, r)); log('ChatGPT answered without the JSON block. Read the answer below, or ask it again.', 'err'); return false; }
+    if (!data) { box.replaceChildren(card(lead, null, r)); box.scrollIntoView({ behavior: 'smooth', block: 'start' }); log('ChatGPT answered without the JSON block. Press "Ask ChatGPT for the JSON block" on the card.', 'err'); return false; }
     box.replaceChildren(card(lead, data, r));
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
     return true;
   } catch (e) { box.replaceChildren(el('div', { class: 'card err' }, e.message)); log(e.message, 'err'); return false; }
   finally { busy = false; }
@@ -173,11 +182,21 @@ function card(lead, data, r) {
   const drafts = (d.drafts || []).map((x) => ({ x, body: tx(x.body, 4), subject: el('input', { value: x.subject || '' }), target: el('input', { value: x.target_url || '', placeholder: 'link (comments and Contact Us)' }) }));
   const links = (d.links || []).map((k) => `${k.kind || 'other'}: ${k.url}`).join('\n');
   const out = el('div');
+  const reaskBtn = el('button', { class: 'primary', onclick: async () => {
+    reaskBtn.disabled = true; reaskBtn.textContent = 'Asking…';
+    try {
+      const tabId = await chatTab(r.url && /\/c\//.test(r.url) ? r.url : cfg.project);
+      const r2 = await chrome.tabs.sendMessage(tabId, { type: 'ask', prompt: 'Send ONLY the machine-readable json block for this lead, exactly as specified in the MACHINE BLOCK section. One code block tagged json and nothing else.' });
+      if (!r2?.ok) throw new Error(r2?.error || 'No answer');
+      const d2 = extractJson(r2.text); if (!d2) throw new Error('Still no JSON block in the answer. Read the full answer below.');
+      $('work-area').replaceChildren(card(lead, d2, { ...r2, text: r.text + '\n\n' + r2.text })); $('work-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) { reaskBtn.disabled = false; reaskBtn.textContent = 'Ask ChatGPT for the JSON block'; log(e.message, 'err'); }
+  } }, 'Ask ChatGPT for the JSON block');
   const skipBtn = el('button', { onclick: () => { document.getElementById('lead' + lead.id)?.remove(); $('work-area').replaceChildren(); log(`Skipped ${lead.first_name} ${lead.last_name} (nothing saved)`); } }, 'Skip, do not save');
   const saveBtn = el('button', { class: 'primary', onclick: async () => {
     saveBtn.disabled = true;
     try {
-      const body = { verdict: verdict.value, reason: reason.value, assessment: assessment.value, why_in_pipeline: why.value, todays_question: d.todays_question || '', next_action: next.value, next_action_days: Number(days.value), denial_reason: d.denial_reason || '', quality: qualitySel.value, lead_category: categorySel.value, channel: channelSel.value, outreach_status: d.outreach_status || '', research_summary: d.research_summary || '', checked: [...new Set([...(d.checked || []), ...(deepInfo[lead.id]?.checked || [])])],
+      const body = { verdict: verdict.value, reason: reason.value, assessment: assessment.value, why_in_pipeline: why.value, todays_question: d.todays_question || '', next_action: next.value, next_action_days: Number(days.value), denial_reason: d.denial_reason || '', quality: qualitySel.value, lead_category: categorySel.value, channel: channelSel.value, outreach_status: d.outreach_status || '', research_summary: d.research_summary || '', rules_version: setup.version || '', checked: [...new Set([...(d.checked || []), ...(deepInfo[lead.id]?.checked || [])])],
         links: [...(d.links || []), ...(deepInfo[lead.id]?.links || [])], drafts: drafts.map((z) => ({ channel: z.x.channel, subject: z.subject.value, body: z.body.value, target_url: z.target.value, note: z.x.note || '' })) };
       const res = await crm('POST', `/api/leads/${lead.id}/ai-result`, body);
       log(`Saved ${lead.first_name} ${lead.last_name}: ${res.verdict}${res.dropdowns?.quality ? ', type ' + res.dropdowns.quality : ''}, ${res.drafts} drafts, ${res.links} links${res.skipped.length ? ', skipped: ' + res.skipped.join('; ') : ''}`, 'ok');
@@ -195,7 +214,7 @@ function card(lead, data, r) {
       links ? el('div', {}, el('div', { class: 'muted' }, 'Links to add'), el('pre', {}, links)) : null,
       ...drafts.map((z) => el('div', { class: 'card' }, el('span', { class: 'chip' }, z.x.channel), z.x.channel === 'email' ? z.subject : null, z.body, ['linkedin_comment', 'linkedin_comment_reply', 'website_contact'].includes(z.x.channel) ? z.target : null,
         z.x.channel === 'linkedin_connect' ? el('div', { class: 'muted' }, 'Connection note limit: 300 characters') : null)),
-      d.needs_human ? el('div', { class: 'muted' }, 'Check by hand: ' + d.needs_human) : null, el('div', { class: 'row' }, saveBtn, skipBtn)) : el('div', { class: 'row' }, skipBtn),
+      d.needs_human ? el('div', { class: 'muted' }, 'Check by hand: ' + d.needs_human) : null, el('div', { class: 'row' }, saveBtn, skipBtn)) : el('div', { class: 'row' }, reaskBtn, skipBtn),
     out, el('details', {}, el('summary', {}, 'Full ChatGPT answer'), el('pre', { style: 'white-space:pre-wrap' }, r.text || '')));
 }
 
