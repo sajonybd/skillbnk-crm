@@ -894,9 +894,20 @@ export function leadsRoutes(db) {
     const SOURCES = { website: 'website_checked_at', linkedin: 'linkedin_checked_at', inbox: 'inbox_checked_at', email: 'email_checked_at' };
     for (const s of Array.isArray(b.checked) ? b.checked : []) if (SOURCES[s]) sets[SOURCES[s]] = now;
     sets.needs_review = ''; sets.needs_review_at = '';
+    // Dropdown fields (lead type, category, channel, outreach status): only values the CRM knows. A SKIP with no lead type becomes "Not a Fit",
+    // which takes it out of the plan and the research list. The stage is never changed here.
+    const dropdowns = {};
+    const want = { quality: b.quality, lead_category: b.lead_category, channel: b.channel, outreach_status: b.outreach_status };
+    if (verdict === 'SKIP' && !String(want.quality || '').trim()) want.quality = 'Not a Fit';
+    const allowedBy = { quality: QUALITIES, lead_category: LEAD_CATEGORIES, channel: CHANNELS, outreach_status: Object.keys(OUTREACH_STATUSES) };
+    for (const [k, v] of Object.entries(want)) {
+      const val = String(v ?? '').trim(); if (!val) continue;
+      if (allowedBy[k].includes(val)) dropdowns[k] = val; else added.skipped.push(`${k}: "${val}" is not a CRM value`);
+    }
     tx(db, () => {
       const cols = Object.keys(sets);
       db.prepare(`UPDATE leads SET ${cols.map((c) => c + ' = ?').join(', ')}, updated_at = ? WHERE id = ?`).run(...cols.map((c) => sets[c]), now, lead.id);
+      if (Object.keys(dropdowns).length) applyChanges(db.prepare('SELECT * FROM leads WHERE id = ?').get(lead.id), dropdowns, req.user);
       logActivity(db, { lead_id: lead.id, user_id: req.user.id, type: 'note', note: `AI research saved by ${req.user.name}: ${verdict} - ${reason}`.slice(0, 600) });
       for (const k of Array.isArray(b.links) ? b.links.slice(0, 10) : []) {
         try {
@@ -912,7 +923,7 @@ export function leadsRoutes(db) {
     for (const d of Array.isArray(b.drafts) ? b.drafts.slice(0, 6) : []) {
       try { const out = addDraft(lead, d, req.user); added.saved.push({ id: out.draft.id, channel: out.draft.channel, subject: out.draft.subject, body: out.draft.body, target_url: out.draft.target_url }); if (out.duplicate) added.duplicates++; else added.drafts++; } catch (e) { added.skipped.push('draft: ' + e.message); }
     }
-    res.json({ ok: true, verdict, ...added, lead_id: lead.id });
+    res.json({ ok: true, verdict, ...added, lead_id: lead.id, dropdowns });
   });
 
   // The person sent it: log the real activity (with the text) and close the draft.

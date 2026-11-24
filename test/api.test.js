@@ -815,3 +815,20 @@ test('ai-result returns the saved drafts with their ids (the extension uses them
   assert.ok(out.saved[0].id > 0);
   assert.equal(out.saved[0].body, 'Hi Sam, quick question.');
 });
+
+test('ai-result sets lead type, category, channel; SKIP becomes Not a Fit; unknown values are skipped; stage stays', async () => {
+  const mk = async (n) => (await call('POST', '/api/leads', { first_name: n, last_name: 'Dropdown', company: n + 'Co', email: `${n}@dd.test` })).id;
+  const a = await mk('Dina');
+  const ra = await call('POST', `/api/leads/${a}/ai-result`, { verdict: 'QUALIFY', reason: 'ok', quality: 'Direct skillBNK Customer', lead_category: 'Customer', channel: 'Both', outreach_status: 'BOGUS', why_in_pipeline: 'Runs cohorts', todays_question: 'How do you track sign-offs?', next_action: 'Connect', next_action_days: 2 });
+  assert.equal(ra.dropdowns.quality, 'Direct skillBNK Customer');
+  assert.ok(ra.skipped.some((s) => /outreach_status/.test(s)));
+  let det = await call('GET', `/api/leads/${a}`);
+  assert.equal(det.lead.quality, 'Direct skillBNK Customer'); assert.equal(det.lead.lead_category, 'Customer'); assert.equal(det.lead.channel, 'Both');
+  assert.equal(det.lead.why_in_pipeline, 'Runs cohorts'); assert.equal(det.lead.todays_question, 'How do you track sign-offs?'); assert.notEqual(det.lead.next_action_date, '');
+  assert.equal(det.lead.stage, 'New');
+  assert.ok(det.activities.some((x) => x.type === 'quality_change'));
+  const s = await mk('Sid');
+  await call('POST', `/api/leads/${s}/ai-result`, { verdict: 'SKIP', reason: 'Competitor LMS vendor', denial_reason: 'Sells an LMS' });
+  det = await call('GET', `/api/leads/${s}`);
+  assert.equal(det.lead.quality, 'Not a Fit'); assert.equal(det.lead.denial_reason, 'Sells an LLMS'.replace('LLMS', 'LMS')); assert.equal(det.lead.stage, 'New');
+});

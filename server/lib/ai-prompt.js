@@ -1,4 +1,5 @@
 import { RULES_V8, RULES_VERSION } from '../data/rules-v8.js';
+import { QUALITIES, LEAD_CATEGORIES, CHANNELS } from '../config.js';
 
 // Two parts, so one AI chat can be used for every lead:
 //   buildSetup()      paste ONCE at the start of the chat: who we are, the rulebook, how to answer.
@@ -101,6 +102,9 @@ After your F line, end the answer with ONE code block tagged json and nothing af
   "next_action": "one action in plain words",
   "next_action_days": 0,
   "denial_reason": "only for SKIP",
+  "quality": "${QUALITIES.join(' | ')}",
+  "lead_category": "${LEAD_CATEGORIES.join(' | ')}",
+  "channel": "${CHANNELS.join(' | ')}",
   "links": [{"kind": "booking | contact | other", "url": "https://...", "label": ""}],
   "drafts": [{"channel": "linkedin_connect | linkedin_dm | linkedin_comment | linkedin_followup | email | website_contact", "subject": "email only", "body": "the exact text, Shiblu voice", "target_url": "needed for comments and Contact Us forms", "note": ""}],
   "research_summary": "5 to 8 short lines a person or AI can read later instead of redoing the research: what they do, headcount, platform, buyer, location, history with us",

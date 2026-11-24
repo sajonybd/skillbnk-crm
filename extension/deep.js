@@ -16,6 +16,21 @@ function pageReadProfile() {
   const m = /(?:^|[\s·•])(1st|2nd|3rd)\b/.exec(top.slice(0, 900));
   return { degree: m ? m[1] : '', pending: /\bPending\b/.test(top.slice(0, 900)), top: top.slice(0, 1400) };
 }
+async function pageReadActivity() {
+  if (/\/(login|uas\/login|checkpoint|authwall)/i.test(location.href)) return { signin: true };
+  await new Promise((r) => setTimeout(r, 2500));
+  window.scrollBy(0, 900); await new Promise((r) => setTimeout(r, 1200));
+  const body = (document.querySelector('main')?.innerText || document.body.innerText || '');
+  if (/hasn.t posted yet|no recent activity|nothing to see yet/i.test(body)) return { none: true };
+  const posts = [...document.querySelectorAll('[data-urn], .feed-shared-update-v2, [class*="feed-shared-update"]')].slice(0, 4).map((p) => {
+    const t = (p.innerText || '').replace(/\s+/g, ' ').trim();
+    const age = (/(?:^|\s)(\d+)\s?(h|d|w|mo|yr)\b/.exec(t) || [])[0]?.trim() || '';
+    return { age, text: t.slice(0, 180) };
+  }).filter((x) => x.text);
+  // fall back to the first "3w" or "2mo" style marker on the page
+  const first = posts[0]?.age || (/(?:^|\s)(\d+)\s?(h|d|w|mo|yr)\b/.exec(body) || [])[0]?.trim() || '';
+  return { posts, first };
+}
 async function pageReadThread(name, slug) {
   const sleepp = (ms) => new Promise((r) => setTimeout(r, ms));
   if (/\/(login|uas\/login|checkpoint|authwall)/i.test(location.href)) return { signin: true };
@@ -71,6 +86,14 @@ async function checkLinkedIn(lead) {
   let tabId = await openBg(`https://www.linkedin.com/in/${s}/`); const p = await runIn(tabId, pageReadProfile); await chrome.tabs.remove(tabId).catch(() => {});
   if (!p || p.signin) return { text: 'LINKEDIN: not checked (sign-in needed).', ok: false, signin: true };
   let out = `LINKEDIN PROFILE: connection ${p.degree || 'unknown'}${p.pending ? ', invite pending' : ''}.\n${p.top}`;
+  // Last activity: tells us whether a pending or silent lead is even on LinkedIn.
+  await humanPause(3000, 8000);
+  tabId = await openBg(`https://www.linkedin.com/in/${s}/recent-activity/all/`);
+  const act = await runIn(tabId, pageReadActivity); await chrome.tabs.remove(tabId).catch(() => {});
+  let activity = 'not read';
+  if (act?.none) activity = 'no public posts or activity found: probably INACTIVE on LinkedIn';
+  else if (act?.first) { const m = /^(\d+)\s?(h|d|w|mo|yr)$/.exec(act.first.replace(/\s/g, '')); const days = m ? Number(m[1]) * { h: 0, d: 1, w: 7, mo: 30, yr: 365 }[m[2]] : null; activity = `last activity about ${act.first} ago${days !== null && days > 60 ? ' (INACTIVE: nothing in the last 60 days)' : ''}`; }
+  out += `\nLAST ACTIVITY: ${activity}.` + (act?.posts?.length ? '\nRecent posts:\n' + act.posts.map((x) => `- ${x.age || '?'}: ${x.text}`).join('\n') : '');
   if (p.degree !== '1st') return { text: out + '\nMessages: not connected, so no conversation to read.', ok: true, degree: p.degree, pending: p.pending, note: `connection ${p.degree || 'unknown'}` };
   await humanPause(4000, 10000);
   tabId = await openBg('https://www.linkedin.com/messaging/');

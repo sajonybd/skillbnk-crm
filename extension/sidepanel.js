@@ -4,6 +4,7 @@ const $ = (id) => document.getElementById(id);
 const el = (tag, attrs = {}, ...kids) => { const n = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'class') n.className = v; else if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else if (v !== null && v !== undefined && v !== false) n.setAttribute(k, v === true ? '' : v); } for (const c of kids.flat()) if (c !== null && c !== undefined && c !== false) n.append(c.nodeType ? c : document.createTextNode(String(c))); return n; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let cfg = { crm: 'https://skillbnk-crm.onrender.com', token: '', project: '', work: 'plan', owner: 'me', pause: 30, deep: true };
+let appCfg = null; // CRM dropdown values (lead type, category, channel)
 let leads = []; let busy = false; let stop = false; const findings = {}; // lead id -> text the person added
 const deepInfo = {}; // lead id -> { checked: [...], links: [...] } from the automatic check
 
@@ -40,7 +41,7 @@ async function loadCfg() {
   const s = await chrome.storage.local.get('cfg'); cfg = { ...cfg, ...(s.cfg || {}) };
   for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) $(k).value = cfg[k];
   $('deep').checked = cfg.deep !== false;
-  if (!cfg.token || !cfg.project) $('settings').open = true; else refreshTargets();
+  if (!cfg.token || !cfg.project) $('settings').open = true; else { refreshTargets(); try { appCfg = await crm('GET', '/api/config'); } catch { /* the preview then has no dropdown lists */ } }
 }
 $('save').onclick = async () => { for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) cfg[k] = $(k).value.trim(); cfg.deep = $('deep').checked; await chrome.storage.local.set({ cfg }); log('Settings saved', 'ok'); };
 $('master').onclick = async () => { try { const s = await crm('GET', '/api/leads/ai-setup'); await navigator.clipboard.writeText(s.prompt); log(`Master prompt copied (${s.chars.toLocaleString()} characters). Paste it into the ChatGPT project's instructions, or save it as a .txt file and upload it to the project files.`, 'ok'); } catch (e) { log(e.message, 'err'); } };
@@ -138,10 +139,10 @@ async function researchOne(lead) {
     const detail = await crm('GET', `/api/leads/${lead.id}`);
     const chatLink = (detail.links || []).find((k) => k.kind === 'chatgpt' && /\/c\//.test(k.url))?.url;
     let prompt; let chatUrl = cfg.project;
-    if (detail.lead.research_summary && detail.lead.needs_review && chatLink) {
-      // Already researched: continue in that lead's own chat and send only what is new.
+    if (chatLink) {
+      // This lead already has its own chat: continue it and send only what is new.
       chatUrl = chatLink;
-      prompt = `UPDATE ${new Date().toISOString().slice(0, 10)}. New since the last check: ${detail.lead.needs_review}.\n\n${findings[lead.id] || '(no extra findings)'}\n\nRe-assess this lead from the earlier research plus this update. Answer in the same A to F format, but only say what changed. End with the same machine-readable json block as before, with research_summary updated.`;
+      prompt = `UPDATE ${new Date().toISOString().slice(0, 10)}. New since the last check: ${detail.lead.needs_review || 'no change flagged, this is a manual re-check'}.\n\n${findings[lead.id] || '(no extra findings)'}\n\nRe-assess this lead from the earlier research plus this update. Answer in the same A to F format, but only say what changed. End with the same machine-readable json block as before, with research_summary updated.`;
       log(`Continuing the saved ChatGPT chat for ${lead.first_name} ${lead.last_name} (only what is new)`);
     } else {
       ({ prompt } = await crm('GET', `/api/leads/${lead.id}/ai-prompt?machine=1`));
@@ -151,6 +152,7 @@ async function researchOne(lead) {
     const tabId = await chatTab(chatUrl);
     const r = await chrome.tabs.sendMessage(tabId, { type: 'ask', prompt });
     if (!r?.ok) throw new Error(r?.error || 'No answer from ChatGPT');
+    if (r.url && /\/c\//.test(r.url)) { try { await crm('POST', `/api/leads/${lead.id}/links`, { url: r.url, kind: 'chatgpt', label: 'ChatGPT research' }); log('ChatGPT chat link saved on the lead', 'ok'); } catch (e) { if (!/already added/i.test(e.message)) log('Could not save the ChatGPT chat link: ' + e.message, 'err'); } } else log('ChatGPT answered, but its chat link was not visible, so it was not saved', 'err');
     const data = extractJson(r.text);
     if (!data) { box.replaceChildren(card(lead, null, r)); log('ChatGPT answered without the JSON block. Read the answer below, or ask it again.', 'err'); return false; }
     box.replaceChildren(card(lead, data, r));
@@ -164,6 +166,8 @@ function card(lead, data, r) {
   const d = data || {};
   const tx = (v, rows = 2) => { const t = el('textarea', { rows }); t.value = v || ''; return t; };
   const verdict = el('select', {}, ...['PURSUE', 'QUALIFY', 'NURTURE', 'SKIP'].map((v) => el('option', { value: v }, v))); verdict.value = String(d.verdict || 'QUALIFY').toUpperCase();
+  const pick = (list, val) => { const s = el('select', {}, el('option', { value: '' }, '(leave as is)'), ...(list || []).map((v) => el('option', { value: v }, v))); s.value = (list || []).includes(val) ? val : ''; return s; };
+  const qualitySel = pick(appCfg?.qualities, d.quality), categorySel = pick(appCfg?.leadCategories, d.lead_category), channelSel = pick(appCfg?.channels, d.channel);
   const reason = tx(d.reason), assessment = tx(d.assessment, 3), why = tx(d.why_in_pipeline), next = tx(d.next_action, 1);
   const days = el('input', { type: 'number', min: 0, max: 60, value: d.next_action_days ?? 0, style: 'width:70px' });
   const drafts = (d.drafts || []).map((x) => ({ x, body: tx(x.body, 4), subject: el('input', { value: x.subject || '' }), target: el('input', { value: x.target_url || '', placeholder: 'link (comments and Contact Us)' }) }));
@@ -173,11 +177,10 @@ function card(lead, data, r) {
   const saveBtn = el('button', { class: 'primary', onclick: async () => {
     saveBtn.disabled = true;
     try {
-      const body = { verdict: verdict.value, reason: reason.value, assessment: assessment.value, why_in_pipeline: why.value, todays_question: d.todays_question || '', next_action: next.value, next_action_days: Number(days.value), denial_reason: d.denial_reason || '', research_summary: d.research_summary || '', checked: [...new Set([...(d.checked || []), ...(deepInfo[lead.id]?.checked || [])])],
+      const body = { verdict: verdict.value, reason: reason.value, assessment: assessment.value, why_in_pipeline: why.value, todays_question: d.todays_question || '', next_action: next.value, next_action_days: Number(days.value), denial_reason: d.denial_reason || '', quality: qualitySel.value, lead_category: categorySel.value, channel: channelSel.value, outreach_status: d.outreach_status || '', research_summary: d.research_summary || '', checked: [...new Set([...(d.checked || []), ...(deepInfo[lead.id]?.checked || [])])],
         links: [...(d.links || []), ...(deepInfo[lead.id]?.links || [])], drafts: drafts.map((z) => ({ channel: z.x.channel, subject: z.subject.value, body: z.body.value, target_url: z.target.value, note: z.x.note || '' })) };
       const res = await crm('POST', `/api/leads/${lead.id}/ai-result`, body);
-      if (r.url && /\/c\//.test(r.url)) { try { await crm('POST', `/api/leads/${lead.id}/links`, { url: r.url, kind: 'chatgpt', label: 'ChatGPT research' }); } catch { /* already added */ } }
-      log(`Saved ${lead.first_name} ${lead.last_name}: ${res.verdict}, ${res.drafts} drafts, ${res.links} links${res.skipped.length ? ', skipped: ' + res.skipped.join('; ') : ''}`, 'ok');
+      log(`Saved ${lead.first_name} ${lead.last_name}: ${res.verdict}${res.dropdowns?.quality ? ', type ' + res.dropdowns.quality : ''}, ${res.drafts} drafts, ${res.links} links${res.skipped.length ? ', skipped: ' + res.skipped.join('; ') : ''}`, 'ok');
       const saved = res.saved || [];
       out.replaceChildren(el('div', { class: 'ok' }, `Saved to the CRM (${res.drafts} drafts, ${res.links} links). Nothing was sent.`), ...quickLinks(lead, saved),
         ['PURSUE', 'QUALIFY'].includes(res.verdict) ? el('div', { class: 'row' }, el('button', { onclick: async (ev) => { try { await crm('POST', `/api/leads/${lead.id}/ceo-submit`, { note: body.reason }); ev.target.disabled = true; ev.target.textContent = 'Sent to CEO'; log(`${lead.first_name} ${lead.last_name} sent to the CEO`, 'ok'); } catch (e) { log(e.message, 'err'); } } }, 'Send lead to CEO')) : null,
@@ -188,7 +191,7 @@ function card(lead, data, r) {
   } }, 'Save to CRM');
   return el('div', { class: 'card' },
     el('div', { class: 'row' }, el('b', {}, `${lead.first_name} ${lead.last_name}`), verdict, !data ? el('span', { class: 'chip SKIP' }, 'No JSON block found') : null),
-    data ? el('div', {}, 'Reason', reason, 'Assessment line', assessment, 'Why in pipeline', why, el('div', { class: 'row' }, 'Next action', next, 'in days', days),
+    data ? el('div', {}, 'Reason', reason, 'Assessment line', assessment, 'Why in pipeline', why, el('div', { class: 'row' }, 'Next action', next, 'in days', days), el('div', { class: 'row' }, 'Lead type', qualitySel, 'Category', categorySel, 'Channel', channelSel),
       links ? el('div', {}, el('div', { class: 'muted' }, 'Links to add'), el('pre', {}, links)) : null,
       ...drafts.map((z) => el('div', { class: 'card' }, el('span', { class: 'chip' }, z.x.channel), z.x.channel === 'email' ? z.subject : null, z.body, ['linkedin_comment', 'linkedin_comment_reply', 'website_contact'].includes(z.x.channel) ? z.target : null,
         z.x.channel === 'linkedin_connect' ? el('div', { class: 'muted' }, 'Connection note limit: 300 characters') : null)),
@@ -226,4 +229,5 @@ async function runBatch() {
   }
   batchInfo = ''; setStatus(''); log('Batch finished or stopped');
 }
+$('ver').textContent = 'v' + chrome.runtime.getManifest().version;
 loadCfg();
