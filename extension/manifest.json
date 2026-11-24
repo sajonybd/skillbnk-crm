@@ -5,7 +5,7 @@
   "description": "Takes the next lead from the skillBNK CRM, asks ChatGPT in the skillBNK project, and saves the reviewed answer back to the CRM. Prepares drafts only; never sends.",
   "permissions": ["storage", "sidePanel", "tabs", "scripting", "activeTab", "clipboardWrite"],
   "host_permissions": ["https://skillbnk-crm.onrender.com/*", "https://chatgpt.com/*"],
-  "optional_host_permissions": ["<all_urls>"],
+  "optional_host_permissions": ["<all_urls>", "https://www.linkedin.com/*"],
   "background": { "service_worker": "background.js" },
   "side_panel": { "default_path": "sidepanel.html" },
   "action": { "default_title": "skillBNK Research" },

@@ -610,8 +610,11 @@ export function leadsRoutes(db) {
       if (!lead || !SIGNALS[it?.type]) { skipped.push(String(it?.lead_id)); continue; }
       const text = String(it.text || '').trim().slice(0, 500);
       const now = new Date().toISOString();
+      const line = `Check: ${SIGNALS[it.type]}${text ? ' - ' + text : ''}`;
+      // The same signal seen again in the next sweep is not news.
+      if (it.type !== 'invite_pending' && db.prepare("SELECT 1 FROM activities WHERE lead_id = ? AND type = 'note' AND note = ? AND created_at >= ?").get(lead.id, line, new Date(Date.now() - 14 * 86400000).toISOString())) { skipped.push(String(lead.id) + ' (already reported)'); continue; }
       tx(db, () => {
-        logActivity(db, { lead_id: lead.id, user_id: req.user.id, type: 'note', note: `Check: ${SIGNALS[it.type]}${text ? ' - ' + text : ''}` });
+        logActivity(db, { lead_id: lead.id, user_id: req.user.id, type: 'note', note: line });
         if (it.type === 'invite_accepted') { if (!lead.accepted_date) recordActivity(lead, 'linkedin_connected', 'Connection accepted (seen by the daily check)', req.user); }
         if (it.type !== 'invite_pending') db.prepare('UPDATE leads SET needs_review = ?, needs_review_at = ?, updated_at = ? WHERE id = ?').run(SIGNALS[it.type] + (text ? ': ' + text.slice(0, 120) : ''), now, now, lead.id);
         else db.prepare('UPDATE leads SET linkedin_checked_at = ? WHERE id = ?').run(now, lead.id);

@@ -24,9 +24,12 @@
     <input id="pause" type="number" min="5" value="30" style="width:70px" title="Seconds to wait between leads"> <span class="muted">sec between leads</span></div>
   <div class="row"><button id="save">Save settings</button><button id="master">Copy master prompt</button><span class="muted">Put it in the ChatGPT project once (instructions or a project file).</span></div>
 </details>
+<div class="row"><button id="sweep">Run daily sweep</button><span class="muted">Reads sent invitations, the LinkedIn inbox list (and webmail soon). Read-only.</span></div>
+<div id="sweep-out" class="muted"></div>
 <div class="row"><button id="load" class="primary">Load leads</button><span id="count" class="muted"></span></div>
 <div id="queue"></div>
 <div id="work-area"></div>
 <h2>Log</h2><div id="log"></div>
 <script src="sidepanel.js"></script>
+<script src="sweep.js"></script>
 </body></html>
