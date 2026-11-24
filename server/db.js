@@ -219,12 +219,15 @@ export function openDb(file) {
   // 24 Nov 2026 (later): InMail daily target 5 and Email daily target 15. Only numbers still at the old 10 are moved; a number someone set by hand stays.
   db.prepare("UPDATE member_targets SET daily_target = 5 WHERE metric = 'linkedin_inmail' AND daily_target = 10").run();
   db.prepare("UPDATE member_targets SET daily_target = 15 WHERE metric = 'email' AND daily_target = 10").run();
+  // Direct messages: daily target 10 (was 15 on the live numbers, 25 in the built-in default).
+  db.prepare("UPDATE member_targets SET daily_target = 10 WHERE metric = 'linkedin_dm' AND daily_target IN (15, 25)").run();
   try {
     const row = db.prepare("SELECT value FROM settings WHERE key = 'default_targets'").get();
     const v = row ? JSON.parse(row.value) : null;
     if (v && typeof v === 'object') {
       if (v.linkedin_inmail === 10) v.linkedin_inmail = 5;
       if (v.email === 10) v.email = 15;
+      if (v.linkedin_dm === 15 || v.linkedin_dm === 25) v.linkedin_dm = 10;
       db.prepare("UPDATE settings SET value = ? WHERE key = 'default_targets'").run(JSON.stringify(v));
     }
   } catch { /* leave the stored defaults as they are */ }

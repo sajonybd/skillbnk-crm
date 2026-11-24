@@ -784,6 +784,7 @@ test('targets: comment replies are not listed; InMail default 5 and Email defaul
   assert.equal(Object.hasOwn(pb.targets.metrics, 'linkedin_comment_reply'), false);
   assert.equal(pb.targets.defaults.linkedin_inmail, 5);
   assert.equal(pb.targets.defaults.email, 15);
+  assert.equal(pb.targets.defaults.linkedin_dm, 10);
   assert.equal(Object.hasOwn(pb.targets.defaults, 'linkedin_comment_reply'), true, 'defaults keep it at 0 so nothing else breaks');
 });
 
