@@ -275,7 +275,7 @@ async function researchOne(lead) {
     if (chatLink) {
       // This lead already has its own chat: continue it and send only what is new.
       chatUrl = chatLink;
-      prompt = `UPDATE ${new Date().toISOString().slice(0, 10)}. New since the last check: ${detail.lead.needs_review || 'no change flagged, this is a manual re-check'}.\n\n${findings[lead.id] || '(no extra findings)'}\n\nRe-assess this lead from the earlier research plus this update. Answer in the same A to F format, but only say what changed. End with the same machine-readable json block as before, with research_summary updated.`;
+      prompt = `UPDATE ${new Date().toISOString().slice(0, 10)}. New since the last check: ${detail.lead.needs_review || 'no change flagged, this is a manual re-check'}.\n\n${findings[lead.id] || '(no extra findings)'}\n\nRe-assess this lead from the earlier research plus this update. Any draft you write follows this writing standard:\n${WRITING}\n\n Answer in the same A to F format, but only say what changed. End with the same machine-readable json block as before, with research_summary updated.`;
       if (cfg.setup !== false) { const st = await getSetup(); if (detail.lead.rules_version !== st.version) { prompt = `RULES UPDATED. The rulebook below replaces every earlier version of the rules in this chat. Use only this one from now on.\n\n${st.text}\n\n=== END OF UPDATED RULEBOOK ===\n\n` + prompt; log('Rules changed since this chat last saw them: sending the updated rulebook with the update', 'ok'); } }
       log(`Continuing the saved ChatGPT chat for ${lead.first_name} ${lead.last_name} (only what is new)`);
     } else {

@@ -3,6 +3,15 @@
 //    and saves the better verdict plus a draft. 2) A QUALIFY or PURSUE lead with no draft gets one more ChatGPT round that must end in a draft or an exact reason.
 // 3) An inbox, conversation or InMail task is only done when YOU press the button (it reads LinkedIn read-only, one lead at a time).
 // Nothing is ever sent. One round only, so it can never loop. Needs globals from sidepanel.js, sweep.js and deep.js.
+const WRITING = `HOW TO WRITE A FIRST TOUCH (connection note, first DM, first comment, first email, Contact Us form). This overrides any habit of describing what we do.
+- The goal is a quick reply. People reply when they feel noticed and asked about THEIR work. They ignore anything that smells like a sales pitch.
+- Shape, two or three short lines: (1) "Hi Name," (2) ONE real fact about THEM that we actually read (their class, program, post, role, location), said with simple interest, (3) ONE easy, specific question about how THEY handle something today, answerable in one line (for example: "Is it mostly paper, or do you use something?").
+- Intro: only "I'm Shiblu, a founder based in Warren, MI" (or "a fellow Michigander" when their Michigan location is verified), or "a tech founder with 25+ years of experience". Never write skillBNK, platform, LMS, software, automation, "we help", "we offer", free trial, demo, pilot, meeting, call or any price in a first touch.
+- The question is about THEM, never about our product. Never "would you be interested in", never "can I show you".
+- A connection note is 300 characters or fewer, holds the fact and the question, has no signature and no "Would love to connect!".
+- Good connection note: "Hi Samania, I'm Shiblu, a founder based in Warren, MI. I saw your CNA classes in Detroit. Curious how you track attendance and skills sign-offs for each cohort. Mostly paper?"
+- Bad: anything that names or describes our product, offers something, or asks for time.
+- After they reply: answer THEIR words first, then ask ONE more question about the problem they named. Mention skillBNK, a free limited-time pilot or a short call only when they ask what we do, or after two real exchanges. Then offer two time options.`;
 const THREAD_HINT = /inbox|conversation|thread|inmail|sales navigator|messaging|latest reply|their reply|replied/i;
 const SALES_HINT = /sales navigator|inmail|\/sales\//i;
 const KEYWORDS = /pricing|price|fund|tuition|cost|corporate|enterprise|team|about|leadership|executive|staff|program|course|training|contact|learn more/i;
@@ -72,7 +81,7 @@ async function askAndSave(lead, d, r, task, evidence, kind) {
   const need = kind === 'draft'
     ? 'You saved this lead as ' + String(d.verdict).toUpperCase() + ' with NO draft. Write the draft now (in Shiblu\'s voice, from the rulebook) for the next action. If a draft is truly impossible today, put the exact reason and the one page or inbox a person must check in needs_human.'
     : 'Use this evidence to finish the task. Update the verdict only if the evidence changes it. Give ONE next_action a person can do today and write the draft for it (in Shiblu\'s voice, from the rulebook). If the evidence is missing or says sign-in needed, say so in needs_human and still give the best draft you can.';
-  const prompt = `FOLLOW-UP for ${lead.first_name} ${lead.last_name}${lead.company ? ' (' + lead.company + ')' : ''}.${summary}\nThe task from your last answer was: ${task || '(none, a draft was missing)'}\nThe browser extension did that task read-only. What it saw:\n\n${evidence}\n\n${need}\nAnswer briefly, then end with the same machine-readable json block as before (all keys, one code block tagged json).`;
+  const prompt = `FOLLOW-UP for ${lead.first_name} ${lead.last_name}${lead.company ? ' (' + lead.company + ')' : ''}.${summary}\nThe task from your last answer was: ${task || '(none, a draft was missing)'}\nThe browser extension did that task read-only. What it saw:\n\n${evidence}\n\n${need}\nWriting standard for any draft:\n${WRITING}\n\nAnswer briefly, then end with the same machine-readable json block as before (all keys, one code block tagged json).`;
   const tabId = await chatTab(r.url && /\/c\//.test(r.url) ? r.url : cfg.project);
   const a = await chrome.tabs.sendMessage(tabId, { type: 'ask', prompt });
   if (!a?.ok) throw new Error(a?.error || 'No answer from ChatGPT');
@@ -90,12 +99,12 @@ function showFollow(box, lead, { res, d2 }) {
 // The CRM already decides the step (guide.kind). We only turn it into a draft the person can review and send later.
 const STEP_DRAFT = { warm: ['linkedin_comment'], nurture: ['linkedin_comment'], connect: ['linkedin_connect'], first_message: ['linkedin_dm'], followup: ['linkedin_followup'], last_followup: ['linkedin_followup'], reply: ['linkedin_followup', 'email'], email: ['email'], no_email: ['website_contact', 'linkedin_comment'] };
 const STEP_RULE = {
-  linkedin_connect: 'A connection note: 300 characters or fewer, one short line about them, NO offer, no signature.',
-  linkedin_dm: 'The first message to someone who does not know us: one fact about them and ONE easy question about how they work today. No product, no offer, no meeting ask.',
-  linkedin_followup: 'A follow-up or reply message in Shiblu\'s voice. If they wrote last, answer them first. If we wrote last, bring a NEW angle, never "just checking in". If they asked a question or showed interest, you may mention a free limited-time pilot and ask for a short call with two options in the Tuesday to Thursday after 3 PM Michigan window (a human confirms the calendar).',
-  email: 'A short email (50 to 90 words), subject line, one specific observation, one low-friction question.',
-  website_contact: 'A short message for their Contact Us form. Put the form page link in target_url.',
-  linkedin_comment: 'A comment with a real view on ONE recent post (not praise, not a summary), no name, no company, no signature. Put the direct post link in target_url.',
+  linkedin_connect: 'A connection note, 300 characters or fewer: "Hi Name," + who Shiblu is in a few words + ONE real fact about THEM + ONE easy question about how THEY work. No skillBNK, no offer, no signature, no "Would love to connect".',
+  linkedin_dm: 'The first message to someone who does not know us: "Hi Name," + ONE real fact about them + ONE easy question about how they work today. No skillBNK, no product, no offer, no meeting ask. 45 words or fewer.',
+  linkedin_followup: 'A reply or follow-up message in Shiblu\'s voice. If they wrote last, answer THEIR words first and ask ONE more question about the problem they named. If we wrote last, bring a NEW angle with a new question about them, never "just checking in". Mention skillBNK, a free limited-time pilot or a short call only if they asked what we do or after two real exchanges.',
+  email: 'A short email (50 to 90 words) with a subject line. First email: one fact about them and ONE easy question about how they work today. No product, no offer, no meeting ask.',
+  website_contact: 'A short Contact Us message: one fact about them and ONE easy question about how they work today. No product, no offer. Put the form page link in target_url.',
+  linkedin_comment: 'A comment with a real view on ONE recent post (not praise, not a summary), no name, no company, no signature, no product. Put the direct post link in target_url.',
 };
 // Runs inside the lead's recent-activity page: the latest posts with their direct links.
 async function pageReadPosts() {
@@ -136,7 +145,7 @@ async function prepNext(lead, cur, r, box) {
   box.replaceChildren(el('div', { class: 'muted' }, `Next touch: ${g.action}. Reading what is needed and preparing the draft…`));
   const evidence = await evidenceFor(lead, kind);
   const rules = allowed.map((c) => `- ${c}: ${STEP_RULE[c]}`).join('\n');
-  const prompt = `NEXT TOUCH for ${lead.first_name} ${lead.last_name}${lead.company ? ' (' + lead.company + ')' : ''}.\nThe CRM says the next step is: ${g.action}. Why: ${g.why || '-'}\nAllowed draft channel(s):\n${rules}\n\nEvidence the extension read (read-only):\n${evidence || '(none)'}\n\nWrite ONLY the draft for this step, in Shiblu's voice from the rulebook, one draft in the best allowed channel. Keep every other key of the json block as in your last answer. Never send, only draft. Answer in two lines, then the json block with the draft in "drafts".`;
+  const prompt = `NEXT TOUCH for ${lead.first_name} ${lead.last_name}${lead.company ? ' (' + lead.company + ')' : ''}.\nThe CRM says the next step is: ${g.action}. Why: ${g.why || '-'}\nAllowed draft channel(s):\n${rules}\n\nEvidence the extension read (read-only):\n${evidence || '(none)'}\n\nWrite ONLY the draft for this step, in Shiblu's voice from the rulebook, one draft in the best allowed channel. Keep every other key of the json block as in your last answer. Never send, only draft. Writing standard:\n${WRITING}\n\nAnswer in two lines, then the json block with the draft in "drafts".`;
   const tabId = await chatTab(r.url && /\/c\//.test(r.url) ? r.url : cfg.project);
   const a = await chrome.tabs.sendMessage(tabId, { type: 'ask', prompt });
   if (!a?.ok) throw new Error(a?.error || 'No answer from ChatGPT');
