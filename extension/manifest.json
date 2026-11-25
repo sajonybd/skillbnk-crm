@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "skillBNK Research Assistant",
-  "version": "0.10.6",
+  "version": "0.11.0",
   "description": "Takes the next lead from the skillBNK CRM, asks ChatGPT in the skillBNK project, and saves the reviewed answer back to the CRM. Prepares drafts only; never sends.",
   "permissions": [
     "storage",

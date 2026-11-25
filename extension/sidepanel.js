@@ -110,10 +110,10 @@ async function resumePending() {
 async function loadCfg() {
   const s = await chrome.storage.local.get('cfg'); cfg = { ...cfg, ...(s.cfg || {}) };
   for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) $(k).value = cfg[k];
-  $('hidedone').checked = cfg.hideDone !== false; $('autosave').checked = cfg.autosave !== false; $('deep').checked = cfg.deep !== false; $('setup').checked = cfg.setup !== false;
+  $('hidedone').checked = cfg.hideDone !== false; $('autosave').checked = cfg.autosave !== false; $('followup').checked = cfg.followup !== false; $('deep').checked = cfg.deep !== false; $('setup').checked = cfg.setup !== false;
   if (!cfg.token || !cfg.project) $('settings').open = true; else { refreshTargets(); await resumePending(); await renderDone(); try { appCfg = await crm('GET', '/api/config'); } catch { /* the preview then has no dropdown lists */ } $('load').click(); /* show the list right away */ }
 }
-$('save').onclick = async () => { for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) cfg[k] = $(k).value.trim(); cfg.hideDone = $('hidedone').checked; cfg.autosave = $('autosave').checked; cfg.deep = $('deep').checked; cfg.setup = $('setup').checked; await chrome.storage.local.set({ cfg }); log('Settings saved', 'ok'); $('load').click(); };
+$('save').onclick = async () => { for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) cfg[k] = $(k).value.trim(); cfg.hideDone = $('hidedone').checked; cfg.autosave = $('autosave').checked; cfg.followup = $('followup').checked; cfg.deep = $('deep').checked; cfg.setup = $('setup').checked; await chrome.storage.local.set({ cfg }); log('Settings saved', 'ok'); $('load').click(); };
 
 $('load').onclick = async () => {
   try {
@@ -334,7 +334,8 @@ function card(lead, data, r) {
       saveBtn.remove(); skipBtn.remove(); document.getElementById('lead' + lead.id)?.remove();
       // keep a line for every finished lead, so the next lead in a batch does not hide this one's quick links
       const dn = $('done'); if (dn.classList.contains('muted')) { dn.classList.remove('muted'); dn.replaceChildren(); }
-      dn.prepend(el('div', { class: 'card' }, el('b', {}, `${lead.first_name} ${lead.last_name}`), ' ', el('span', { class: 'chip ' + res.verdict }, res.verdict), el('div', {}, 'Next: ' + (body.next_action || '-')), ...quickLinks(lead, saved), logRow(lead)));
+      const followBox = el('div'); dn.prepend(el('div', { class: 'card' }, el('b', {}, `${lead.first_name} ${lead.last_name}`), ' ', el('span', { class: 'chip ' + res.verdict }, res.verdict), el('div', {}, 'Next: ' + (body.next_action || '-')), ...quickLinks(lead, saved), followBox, logRow(lead)));
+      try { await followThrough(lead, d, r, res, followBox); } catch (e) { log('Follow-up: ' + e.message, 'err'); }
       return true;
     } catch (e) { saveBtn.disabled = false; log(e.message, 'err'); out.replaceChildren(el('div', { class: 'err' }, e.message)); return false; }
   };

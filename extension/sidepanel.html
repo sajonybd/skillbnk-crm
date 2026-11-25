@@ -24,6 +24,7 @@
     <input id="pause" type="number" min="5" value="30" style="width:70px" title="Seconds to wait between leads"> <span class="muted">sec between leads</span></div>
   <div class="row"><label><input type="checkbox" id="setup" style="width:auto"> Put the master prompt (rulebook) at the start of every new chat</label></div>
   <div class="row"><label><input type="checkbox" id="hidedone" style="width:auto"> Hide leads that are not due yet or were already researched today</label></div>
+  <div class="row"><label><input type="checkbox" id="followup" style="width:auto"> After saving, do the follow-up: read the public page the research asked for and ask ChatGPT for a draft (nothing is ever sent)</label></div>
   <div class="row"><label><input type="checkbox" id="autosave" style="width:auto"> Save the ChatGPT result to the CRM automatically (nothing is ever sent)</label></div>
   <div class="row"><label><input type="checkbox" id="deep" style="width:auto"> Check website, LinkedIn, webmail before asking ChatGPT</label></div>
   <div class="row"><button id="save">Save settings</button></div>
@@ -47,4 +48,5 @@
 <script src="sidepanel.js"></script>
 <script src="sweep.js"></script>
 <script src="deep.js"></script>
+<script src="followup.js"></script>
 </body></html>
