@@ -407,6 +407,12 @@ async function runBatch() {
     const l = list[idx]; nextInBatch = list[idx + 1] || null;
     if (stop || stopRun) break;
     batchInfo = `Lead ${++i} of ${total}`;
+    if (cfg.prescreen !== false && typeof prescreen === 'function') {
+      if (!l.hydrated) { try { const full = (await crm('GET', `/api/leads/${l.id}`)).lead; Object.assign(l, full, { hydrated: true }); } catch {} }
+      const ps = await prescreen(l);
+      if (stop || stopRun) break;
+      if (ps.skip) { log(`Pre-screen: ${l.first_name} ${l.last_name} looks like a SKIP (${ps.reasons.join('; ')}). Saved a note, moved on. Confirm the SKIP in the CRM.`, 'ok'); liveNote(`${l.first_name} ${l.last_name}: likely SKIP, not researched`); continue; }
+    }
     const ok = await researchOne(l);
     if (stop || stopRun) break;
     if (!ok) { // one bad lead does not stop the batch; three in a row do
