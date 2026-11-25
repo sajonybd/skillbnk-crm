@@ -302,6 +302,7 @@ async function researchOne(lead) {
       try { const r2 = await chrome.tabs.sendMessage(tabId, { type: 'ask', prompt: 'Send ONLY the machine-readable json block for this lead, exactly as specified in the MACHINE BLOCK section. One code block tagged json and nothing else.' }); if (r2?.ok) { data = extractJson(r2.text); if (data) r.text += '\n\n' + r2.text; } } catch { /* shown below */ }
     }
     if (!data) { liveEnd('ChatGPT gave no JSON block. Skipped, nothing saved.'); box.replaceChildren(card(lead, null, r)); box.scrollIntoView({ behavior: 'smooth', block: 'start' }); log('ChatGPT answered without the JSON block. Press "Ask ChatGPT for the JSON block" on the card.', 'err'); return false; }
+    data = await polishDrafts(lead, data, tabId);
     const c = card(lead, data, r); box.replaceChildren(c);
     if (cfg.autosave !== false) {
       liveAt(4, 'Saving the result to the CRM (nothing is sent)');

@@ -19,6 +19,43 @@ const THREAD_HINT = /inbox|conversation|thread|inmail|sales navigator|messaging|
 const SALES_HINT = /sales navigator|inmail|\/sales\//i;
 const KEYWORDS = /pricing|price|fund|tuition|cost|corporate|enterprise|team|about|leadership|executive|staff|program|course|training|contact|learn more/i;
 
+
+// ── Style check on every first-touch draft: stock phrases, product talk, no/too many questions, yes/no questions, and the same opening as recent drafts ──
+const FIRST_TOUCH = ['linkedin_connect', 'linkedin_dm', 'email', 'website_contact'];
+const STOCK = /caught my attention|glad to connect|would love to connect|particularly relevant|my background|i noticed you|i came across|reach out|stood out|synerg|leverage|streamline|excited to|hope this (email|message)/i;
+const PITCH = /skillbnk|platform|\blms\b|software|automation|free (trial|pilot)|\bdemo\b|\bpilot\b|\bmeeting\b|schedule a|book a|our (product|solution|service)/i;
+const openerOf = (b) => String(b || '').replace(/^\s*(hi|hello|hey|good \w+|gm)\b[^,!.\n]*[,!.]?\s*/i, '').toLowerCase().replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim().slice(0, 32);
+function lintDraft(x, recent) {
+  if (!FIRST_TOUCH.includes(x.channel)) return [];
+  const b = String(x.body || ''), issues = [];
+  const stock = STOCK.exec(b); if (stock) issues.push(`stock phrase "${stock[0]}"`);
+  const pitch = PITCH.exec(b); if (pitch) issues.push(`mentions "${pitch[0]}" (no product, offer or meeting in a first touch)`);
+  const qs = b.match(/[^.!?\n]*\?/g) || [];
+  if (!qs.length) issues.push('no question'); else if (qs.length > 1) issues.push('more than one question');
+  else if (/^\s*(does|do|is|are|would|can|could|will)\b/i.test(qs[0])) issues.push('a yes/no question that probes for a need; ask how, what or why about THEIR work or story instead');
+  if (x.channel === 'linkedin_connect' && b.length > 300) issues.push('over 300 characters');
+  const o = openerOf(b); if (o && recent.filter((r) => r === o).length >= 1) issues.push('same opening as a recent draft');
+  return issues;
+}
+async function polishDrafts(lead, data, tabId) {
+  try {
+    const store = (await chrome.storage.local.get('openers')).openers || [];
+    const bad = (data.drafts || []).map((x) => ({ x, issues: lintDraft(x, store) })).filter((y) => y.issues.length);
+    if (bad.length && tabId) {
+      liveNote('Style check: asking ChatGPT to rewrite ' + bad.length + ' draft(s)');
+      const list = bad.map((y) => `- ${y.x.channel}: "${y.x.body}"\n  Problems: ${y.issues.join('; ')}`).join('\n');
+      const prompt = `STYLE CHECK for ${lead.first_name} ${lead.last_name}. These drafts break the writing standard:\n${list}\n\nRewrite ONLY those drafts. Use a different opening and structure from these recent drafts: ${store.slice(-8).map((o) => '"' + o + '"').join(', ') || '(none)'}. Pick ONE hook only this person has (a move, something they built or shared, a role, a number). One question, ask how, what or why about THEM, not yes/no. No product, no offer. Connection note 300 characters or fewer. Keep every other key of the json block as in your last answer, with the full drafts array. Answer with one line, then the json block.\n\nWriting standard:\n${WRITING}`;
+      const a = await chrome.tabs.sendMessage(tabId, { type: 'ask', prompt });
+      const d2 = a?.ok ? extractJson(a.text) : null;
+      if (d2?.drafts?.length) { const keep = (data.drafts || []).filter((x) => !bad.some((y) => y.x.channel === x.channel)); data.drafts = [...keep, ...d2.drafts]; log(`Style check rewrote ${bad.length} draft(s) for ${lead.first_name} ${lead.last_name}`, 'ok'); }
+      else log('Style check: no rewrite came back, original draft kept', 'err');
+    }
+    const now = (data.drafts || []).filter((x) => FIRST_TOUCH.includes(x.channel)).map((x) => openerOf(x.body)).filter(Boolean);
+    await chrome.storage.local.set({ openers: [...store, ...now].slice(-30) });
+  } catch (e) { log('Style check skipped: ' + e.message, 'err'); }
+  return data;
+}
+
 function followKind(d, saveRes, verdict) {
   if (!['PURSUE', 'QUALIFY'].includes(verdict) && !String(d.needs_human || '').trim()) return '';
   const nh = String(d.needs_human || '');
@@ -89,6 +126,7 @@ async function askAndSave(lead, d, r, task, evidence, kind) {
   const a = await chrome.tabs.sendMessage(tabId, { type: 'ask', prompt });
   if (!a?.ok) throw new Error(a?.error || 'No answer from ChatGPT');
   const d2 = extractJson(a.text); if (!d2) throw new Error('The follow-up answer had no JSON block. The first result stays saved.');
+  await polishDrafts(lead, d2, tabId);
   d2.needs_human = d2.needs_human || ''; d2.links = [...(d.links || []), ...(d2.links || [])];
   const res = await crm('POST', `/api/leads/${lead.id}/ai-result`, followBody({ ...d, ...d2 }));
   log(`Follow-up saved for ${lead.first_name} ${lead.last_name}: ${res.verdict}, ${res.drafts} new draft${res.drafts === 1 ? '' : 's'}${d2.needs_human ? ', still to check by hand: ' + d2.needs_human : ''}`, 'ok');
@@ -152,7 +190,8 @@ async function prepNext(lead, cur, r, box) {
   const tabId = await chatTab(r.url && /\/c\//.test(r.url) ? r.url : cfg.project);
   const a = await chrome.tabs.sendMessage(tabId, { type: 'ask', prompt });
   if (!a?.ok) throw new Error(a?.error || 'No answer from ChatGPT');
-  const d2 = extractJson(a.text); const drafts = (d2?.drafts || []).filter((x) => allowed.includes(x.channel));
+  const d2 = extractJson(a.text); if (d2) await polishDrafts(lead, d2, tabId);
+  const drafts = (d2?.drafts || []).filter((x) => allowed.includes(x.channel));
   if (!drafts.length) throw new Error('ChatGPT gave no usable draft for this step. Next touch stays: ' + g.action);
   const res = await crm('POST', `/api/leads/${lead.id}/ai-result`, followBody({ ...cur, needs_human: '', drafts, links: cur.links || [] }));
   log(`Next touch ready for ${lead.first_name} ${lead.last_name}: ${drafts[0].channel} draft saved. Review it in the CRM, nothing was sent.`, 'ok');
