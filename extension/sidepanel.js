@@ -82,7 +82,7 @@ let batchInfo = '';
 const setStatus = (m) => { const s = $('status'); if (!m) { s.style.display = 'none'; return; } s.style.display = ''; s.textContent = (batchInfo ? batchInfo + ' · ' : '') + m; };
 async function refreshTargets() {
   try {
-    const p = await crm('GET', '/api/plan?assignee=me'); const t = p.members?.[0]?.targets || [];
+    const p = await crm('GET', '/api/plan?assignee=me&day=today'); const t = p.members?.[0]?.targets || [];
     $('targets').replaceChildren(el('b', {}, 'Today: '), ...(t.length ? t.map((x) => el('span', { style: 'margin-right:8px;white-space:nowrap' + (x.done >= x.target ? ';color:#0a7a2f' : '') }, `${x.label} ${x.done}/${x.target}`)) : ['no targets set']));
   } catch { /* not important */ }
 }
