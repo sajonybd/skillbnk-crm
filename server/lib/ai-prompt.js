@@ -131,6 +131,9 @@ A PURSUE or QUALIFY lead must come back with at least one draft, or with needs_h
 === END MACHINE BLOCK ===`;
 
 // Setup text. The admin's saved Playbook text wins when it looks like the full rulebook; otherwise the built-in v8 copy is used.
+// Bump this text whenever the first-touch writing standard changes; the extension shows it so a person can see the server is current.
+export const WRITING_VERSION = 'v2 (25 Nov 2026: one hook per lead, varied questions)';
+
 export function buildSetup({ playbook }) {
   const custom = playbook && playbook.length > 6000 && /H1\b/.test(playbook);
   const rules = custom ? playbook : RULES_V8;
@@ -142,7 +145,7 @@ ${rules}
 === END OF RULEBOOK ===`;
   // A short code of the exact rulebook text: it changes whenever the rules change, so a chat that saw an older one can be updated.
   const version = createHash('sha1').update(rules).digest('hex').slice(0, 8);
-  return { prompt, chars: prompt.length, rules_source: source, version };
+  return { prompt, chars: prompt.length, rules_source: source, version, writing: WRITING_VERSION };
 }
 
 export function buildLeadPrompt({ lead: l, fit, guide, activities, meetings, links, machine = false }) {

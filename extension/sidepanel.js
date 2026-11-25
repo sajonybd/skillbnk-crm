@@ -46,9 +46,20 @@ setTimeout(() => { const b = document.getElementById('live-stop'); if (b) b.oncl
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let cfg = { crm: 'https://skillbnk-crm.onrender.com', token: '', project: '', work: 'plan', owner: 'me', pause: 20, deep: true, setup: true };
 let setup = { text: '', version: '', at: 0 }; // the rulebook and its version code; refreshed every 10 minutes so a rules change is picked up
-async function getSetup() {
-  if (!setup.text || Date.now() - setup.at > 600000) { const s = await crm('GET', '/api/leads/ai-setup'); setup = { text: s.prompt.replace(/Reply "Ready"[^\n]*/g, 'The first lead follows in this same message. Answer it now.'), version: s.version, at: Date.now() }; }
+async function getSetup(force = false) {
+  if (force || !setup.text || Date.now() - setup.at > 120000) { const s = await crm('GET', '/api/leads/ai-setup'); setup = { text: s.prompt.replace(/Reply "Ready"[^\n]*/g, 'The first lead follows in this same message. Answer it now.'), version: s.version, writing: s.writing || '', source: s.rules_source || '', at: Date.now() }; }
   return setup;
+}
+// Every time the panel opens, and on demand: pull the rulebook and the writing standard fresh from the CRM (nothing is kept from an earlier session) and say what was found.
+async function syncNow() {
+  const box = $('sync'); if (!box) return;
+  try {
+    const st = await getSetup(true); const ver = chrome.runtime.getManifest().version;
+    const ok = !!st.writing;
+    box.className = ok ? 'ok' : 'err';
+    box.textContent = `Synced ${new Date().toLocaleTimeString()}: rules ${st.version} (${st.source || 'built-in'}), writing standard ${st.writing || 'MISSING, the CRM server is not updated yet'}, extension v${ver}`;
+    log('Synced with the CRM: rulebook ' + st.version + (ok ? ', writing standard ' + st.writing : ', writing standard missing on the server'), ok ? 'ok' : 'err');
+  } catch (e) { box.className = 'err'; box.textContent = 'Not synced: ' + e.message + ' (using nothing from the last session)'; }
 }
 let appCfg = null; // CRM dropdown values (lead type, category, channel)
 let leads = []; let busy = false; let stop = false; const findings = {}; // lead id -> text the person added
@@ -77,7 +88,7 @@ async function refreshTargets() {
 }
 const log = (m, cls = '') => { const d = el('div', { class: cls }, `${new Date().toLocaleTimeString()} ${m}`); $('log').prepend(d); if (!cls) setStatus(m); };
 async function crm(method, path, body) {
-  const res = await fetch(cfg.crm.replace(/\/$/, '') + path, { method, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + cfg.token }, body: body ? JSON.stringify(body) : undefined });
+  const res = await fetch(cfg.crm.replace(/\/$/, '') + path, { method, cache: 'no-store', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + cfg.token }, body: body ? JSON.stringify(body) : undefined });
   const j = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(j.error || `CRM said ${res.status}`);
   return j;
@@ -113,7 +124,7 @@ async function loadCfg() {
   const s = await chrome.storage.local.get('cfg'); cfg = { ...cfg, ...(s.cfg || {}) };
   for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) $(k).value = cfg[k];
   $('hidedone').checked = cfg.hideDone !== false; $('autosave').checked = cfg.autosave !== false; $('followup').checked = cfg.followup !== false; $('deep').checked = cfg.deep !== false; $('setup').checked = cfg.setup !== false;
-  if (!cfg.token || !cfg.project) $('settings').open = true; else { refreshTargets(); await resumePending(); await renderDone(); try { appCfg = await crm('GET', '/api/config'); } catch { /* the preview then has no dropdown lists */ } $('load').click(); /* show the list right away */ }
+  if (!cfg.token || !cfg.project) $('settings').open = true; else { await syncNow(); refreshTargets(); await resumePending(); await renderDone(); try { appCfg = await crm('GET', '/api/config'); } catch { /* the preview then has no dropdown lists */ } $('load').click(); /* show the list right away */ }
 }
 $('save').onclick = async () => { for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) cfg[k] = $(k).value.trim(); cfg.hideDone = $('hidedone').checked; cfg.autosave = $('autosave').checked; cfg.followup = $('followup').checked; cfg.deep = $('deep').checked; cfg.setup = $('setup').checked; await chrome.storage.local.set({ cfg }); log('Settings saved', 'ok'); $('load').click(); };
 
@@ -413,4 +424,5 @@ async function runBatch() {
   nextInBatch = null; batchInfo = ''; setStatus(''); log('Batch finished or stopped', 'ok'); if (typeof liveEnd === 'function') liveEnd(`Batch finished: ${i} of ${total} leads processed`);
 }
 $('ver').textContent = 'v' + chrome.runtime.getManifest().version;
+$('syncbtn').onclick = () => syncNow();
 loadCfg();
