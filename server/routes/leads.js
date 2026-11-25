@@ -886,6 +886,9 @@ export function leadsRoutes(db) {
     if (clip(b.next_action, 300)) sets.next_action = clip(b.next_action, 300);
     const days = Number(b.next_action_days);
     if (Number.isFinite(days) && days >= 0 && days <= 60) sets.next_action_date = addDays(todayLocal(), Math.round(days));
+    // A task for a person (check an inbox, confirm a connection...) is kept on the lead so it shows in the Plan follow-up list and the lead's Next action.
+    const human = clip(b.needs_human, 300);
+    if (human) { sets.next_action = clip((sets.next_action ? sets.next_action + ' | ' : '') + 'Check by hand: ' + human, 300); if (!(Number.isFinite(days) && days >= 0 && days <= 60)) sets.next_action_date = todayLocal(); }
     if (verdict === 'SKIP' && clip(b.denial_reason, 300)) sets.denial_reason = clip(b.denial_reason, 300);
     const added = { links: 0, drafts: 0, duplicates: 0, skipped: [], saved: [] };
     const now = new Date().toISOString();

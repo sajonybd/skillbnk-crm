@@ -81,11 +81,37 @@ async function crm(method, path, body) {
   return j;
 }
 
+
+// ── Survive closing the side panel: keep each ChatGPT answer until it is saved, and keep today's finished list ──
+async function stashPending(lead, text) { const s = (await chrome.storage.local.get('pending')).pending || {}; s[lead.id] = { id: lead.id, name: `${lead.first_name} ${lead.last_name}`, text, at: Date.now() }; await chrome.storage.local.set({ pending: s }); }
+async function clearPending(id) { const s = (await chrome.storage.local.get('pending')).pending || {}; delete s[id]; await chrome.storage.local.set({ pending: s }); }
+async function addDone(lead, verdict, next) { const s = (await chrome.storage.local.get('doneList')).doneList || []; const day = new Date().toLocaleDateString('en-CA'); const keep = s.filter((x) => x.day === day && x.id !== lead.id); keep.unshift({ id: lead.id, day, name: `${lead.first_name} ${lead.last_name}`, verdict, next: next || '' }); await chrome.storage.local.set({ doneList: keep.slice(0, 200) }); }
+async function renderDone() {
+  const list = ((await chrome.storage.local.get('doneList')).doneList || []).filter((x) => x.day === new Date().toLocaleDateString('en-CA')); if (!list.length) return;
+  const dn = $('done'); dn.classList.remove('muted'); dn.replaceChildren(...list.map((x) => el('div', { class: 'card' }, el('b', {}, x.name), ' ', el('span', { class: 'chip ' + x.verdict }, x.verdict), el('div', {}, 'Next: ' + (x.next || '-')))));
+}
+async function resumePending() {
+  if (cfg.autosave === false) return;
+  const s = (await chrome.storage.local.get('pending')).pending || {};
+  for (const k of Object.keys(s)) {
+    const p = s[k];
+    if (Date.now() - p.at > 3 * 86400000) { await clearPending(p.id); continue; }
+    const d = extractJson(p.text);
+    if (!d) { log(`Saved answer for ${p.name} has no JSON block. Open the lead and press Research this lead again.`, 'err'); continue; }
+    try {
+      const body = { verdict: String(d.verdict || 'QUALIFY').toUpperCase(), reason: d.reason || '', assessment: d.assessment || '', why_in_pipeline: d.why_in_pipeline || '', todays_question: d.todays_question || '', next_action: d.next_action || '', next_action_days: Number(d.next_action_days) || 0, denial_reason: d.denial_reason || '', quality: d.quality || '', lead_category: d.lead_category || '', channel: d.channel || '', outreach_status: d.outreach_status || '', research_summary: d.research_summary || '', needs_human: d.needs_human || '', rules_version: (typeof setup !== 'undefined' && setup?.version) || '', checked: d.checked || [], links: d.links || [], drafts: (d.drafts || []).map((z) => ({ channel: z.channel, subject: z.subject || '', body: z.body || '', target_url: z.target_url || '', note: z.note || '' })) };
+      const res = await crm('POST', `/api/leads/${p.id}/ai-result`, body);
+      log(`Recovered and saved ${p.name}: ${res.verdict}, ${res.drafts} drafts (it was not saved before the panel closed)`, 'ok');
+      await clearPending(p.id); await addDone({ id: p.id, first_name: p.name, last_name: '' }, res.verdict, body.next_action);
+    } catch (e) { log(`Could not save the kept answer for ${p.name}: ${e.message}`, 'err'); }
+  }
+}
+
 async function loadCfg() {
   const s = await chrome.storage.local.get('cfg'); cfg = { ...cfg, ...(s.cfg || {}) };
   for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) $(k).value = cfg[k];
   $('hidedone').checked = cfg.hideDone !== false; $('autosave').checked = cfg.autosave !== false; $('deep').checked = cfg.deep !== false; $('setup').checked = cfg.setup !== false;
-  if (!cfg.token || !cfg.project) $('settings').open = true; else { refreshTargets(); try { appCfg = await crm('GET', '/api/config'); } catch { /* the preview then has no dropdown lists */ } $('load').click(); /* show the list right away */ }
+  if (!cfg.token || !cfg.project) $('settings').open = true; else { refreshTargets(); await resumePending(); await renderDone(); try { appCfg = await crm('GET', '/api/config'); } catch { /* the preview then has no dropdown lists */ } $('load').click(); /* show the list right away */ }
 }
 $('save').onclick = async () => { for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) cfg[k] = $(k).value.trim(); cfg.hideDone = $('hidedone').checked; cfg.autosave = $('autosave').checked; cfg.deep = $('deep').checked; cfg.setup = $('setup').checked; await chrome.storage.local.set({ cfg }); log('Settings saved', 'ok'); $('load').click(); };
 
@@ -249,6 +275,7 @@ async function researchOne(lead) {
     if (!r?.ok) throw new Error(r?.error || 'No answer from ChatGPT');
     if (r.url && /\/c\//.test(r.url)) { try { await crm('POST', `/api/leads/${lead.id}/links`, { url: r.url, kind: 'chatgpt', label: 'ChatGPT research' }); log('ChatGPT chat link saved on the lead', 'ok'); } catch (e) { if (!/already added/i.test(e.message)) log('Could not save the ChatGPT chat link: ' + e.message, 'err'); } } else log('ChatGPT answered, but its chat link was not visible, so it was not saved', 'err');
     liveAt(4, 'ChatGPT answered, reading the JSON block');
+    await stashPending(lead, r.text); // kept until it is saved, so closing the panel does not lose it
     let data = extractJson(r.text);
     if (!data && cfg.autosave !== false) { // ChatGPT forgot the JSON block: ask for it once, by itself
       liveNote('The answer had no JSON block, asking ChatGPT for it');
@@ -295,7 +322,7 @@ function card(lead, data, r) {
   const doSave = async () => {
     saveBtn.disabled = true;
     try {
-      const body = { verdict: verdict.value, reason: reason.value, assessment: assessment.value, why_in_pipeline: why.value, todays_question: d.todays_question || '', next_action: next.value, next_action_days: Number(days.value), denial_reason: d.denial_reason || '', quality: qualitySel.value, lead_category: categorySel.value, channel: channelSel.value, outreach_status: d.outreach_status || '', research_summary: d.research_summary || '', rules_version: setup.version || '', checked: [...new Set([...(d.checked || []), ...(deepInfo[lead.id]?.checked || [])])],
+      const body = { verdict: verdict.value, reason: reason.value, assessment: assessment.value, why_in_pipeline: why.value, todays_question: d.todays_question || '', next_action: next.value, next_action_days: Number(days.value), denial_reason: d.denial_reason || '', quality: qualitySel.value, lead_category: categorySel.value, channel: channelSel.value, outreach_status: d.outreach_status || '', research_summary: d.research_summary || '', needs_human: d.needs_human || '', rules_version: setup.version || '', checked: [...new Set([...(d.checked || []), ...(deepInfo[lead.id]?.checked || [])])],
         links: [...(d.links || []), ...(deepInfo[lead.id]?.links || [])], drafts: drafts.map((z) => ({ channel: z.x.channel, subject: z.subject.value, body: z.body.value, target_url: z.target.value, note: z.x.note || '' })) };
       const res = await crm('POST', `/api/leads/${lead.id}/ai-result`, body);
       log(`Saved ${lead.first_name} ${lead.last_name}: ${res.verdict}${res.dropdowns?.quality ? ', type ' + res.dropdowns.quality : ''}, ${res.drafts} drafts, ${res.links} links${res.skipped.length ? ', skipped: ' + res.skipped.join('; ') : ''}`, 'ok');
@@ -303,7 +330,7 @@ function card(lead, data, r) {
       out.replaceChildren(el('div', { class: 'ok' }, `Saved to the CRM (${res.drafts} drafts, ${res.links} links). Nothing was sent.`), ...quickLinks(lead, saved),
         ['PURSUE', 'QUALIFY'].includes(res.verdict) ? el('div', { class: 'row' }, el('button', { onclick: async (ev) => { try { await crm('POST', `/api/leads/${lead.id}/ceo-submit`, { note: body.reason }); ev.target.disabled = true; ev.target.textContent = 'Sent to CEO'; log(`${lead.first_name} ${lead.last_name} sent to the CEO`, 'ok'); } catch (e) { log(e.message, 'err'); } } }, 'Send lead to CEO')) : null,
         logRow(lead), el('div', { class: 'muted' }, d.needs_human ? 'Check by hand: ' + d.needs_human : ''));
-      refreshTargets();
+      refreshTargets(); await clearPending(lead.id); await addDone(lead, res.verdict, body.next_action);
       saveBtn.remove(); skipBtn.remove(); document.getElementById('lead' + lead.id)?.remove();
       // keep a line for every finished lead, so the next lead in a batch does not hide this one's quick links
       const dn = $('done'); if (dn.classList.contains('muted')) { dn.classList.remove('muted'); dn.replaceChildren(); }

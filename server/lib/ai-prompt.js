@@ -114,6 +114,7 @@ After your F line, end the answer with ONE code block tagged json and nothing af
 }
 \`\`\`
 Rules: a connection note is 300 characters or fewer. A comment, comment reply or like draft needs the direct post link in target_url (a like draft's body is one line such as "Like this post: <what it is about>"). A Contact Us draft needs the form page link. An InMail draft only if they are NOT connected and the lead's InMail is not disabled.
+next_action must ALWAYS be one concrete thing a person can do today (follow, like, comment, send the connection note, message, follow-up, InMail, email, check one named page, or mark SKIP). Never leave it empty or vague. If you cannot write a draft yet, say exactly what the person must check in needs_human; the CRM saves it as that lead's task.
 Drafts are the point of this research: whenever your next_action is something we send or post (email, InMail, DM, follow-up, comment, reply, like, form), write that draft in the same answer so a person can send it today. Leave drafts empty ONLY when a person must first verify something (say what in needs_human), or when the rules say do nothing yet (say why in reason). More than one draft is fine, for example a comment now and an email later; give each its own channel and a short note saying when to send it.
 === END MACHINE BLOCK ===`;
 
