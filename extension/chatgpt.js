@@ -47,7 +47,7 @@ async function ask(prompt, timeoutMs = 420000) {
   const realClick = (el) => { for (const t of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window })); };
   await sleep(600 + Math.random() * 500); // a short human-like pause, lets the page enable the Send button
   let started = false;
-  for (let attempt = 1; attempt <= 6 && !started; attempt++) {
+  for (let attempt = 1; attempt <= 4 && !started; attempt++) {
     if (boxLen() < 5 && !stopBtn()) { // the text was lost: paste again
       box.focus(); document.execCommand('insertText', false, prompt); await sleep(700);
     }
@@ -56,7 +56,7 @@ async function ask(prompt, timeoutMs = 420000) {
     else if (attempt % 3 === 2) { if (send) realClick(send); else pressEnter(box); }
     else { box.focus(); pressEnter(box); }
     if (attempt > 1) progress(`Sending the prompt to ChatGPT, try ${attempt}…`);
-    started = !!(await waitFor(sent, 7000));
+    started = !!(await waitFor(sent, attempt > 2 ? 4000 : 7000));
   }
   if (started) started = !!(await waitFor(() => assistantMsgs().length > before || stopBtn() || jsonBlocks().length > blocksBefore, 60000));
   if (!started) return { ok: false, error: 'The prompt was pasted but ChatGPT did not start answering. Press the send arrow yourself, then run this lead again.' };

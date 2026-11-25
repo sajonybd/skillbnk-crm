@@ -48,7 +48,7 @@ async function polishDrafts(lead, data, tabId) {
       liveNote('Style check: asking ChatGPT to rewrite ' + bad.length + ' draft(s)');
       const list = bad.map((y) => `- ${y.x.channel}: "${y.x.body}"\n  Problems: ${y.issues.join('; ')}`).join('\n');
       const prompt = `STYLE CHECK for ${lead.first_name} ${lead.last_name}. These drafts break the writing standard:\n${list}\n\nRewrite ONLY those drafts. Use a different opening and structure from these recent drafts: ${store.slice(-8).map((o) => '"' + o + '"').join(', ') || '(none)'}. Pick ONE hook only this person has (a move, something they built or shared, a role, a number). One question, ask how, what or why about THEM, not yes/no. No product, no offer. Connection note 300 characters or fewer. Keep every other key of the json block as in your last answer, with the full drafts array. Answer with one line, then the json block.\n\nWriting standard:\n${WRITING}`;
-      const a = await chrome.tabs.sendMessage(tabId, { type: 'ask', prompt });
+      const a = await Promise.race([chrome.tabs.sendMessage(tabId, { type: 'ask', prompt }), new Promise((r) => setTimeout(() => r({ ok: false, error: 'style check timed out' }), 45000))]);
       const d2 = a?.ok ? extractJson(a.text) : null;
       if (d2?.drafts?.length) { const keep = (data.drafts || []).filter((x) => !bad.some((y) => y.x.channel === x.channel)); data.drafts = [...keep, ...d2.drafts]; log(`Style check rewrote ${bad.length} draft(s) for ${lead.first_name} ${lead.last_name}`, 'ok'); }
       else log('Style check: no rewrite came back, original draft kept', 'err');
