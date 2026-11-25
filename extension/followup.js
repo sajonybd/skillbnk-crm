@@ -36,9 +36,9 @@ async function readPublic(lead, task) {
     if (!/linkedin\.com/i.test(url)) {
       const host = hostOf(url), seen = new Set([url]);
       const more = p.links.filter((x) => hostOf(x.h) === host && KEYWORDS.test(x.h + ' ' + x.t)).map((x) => x.h).filter((h) => !seen.has(h) && seen.add(h)).slice(0, 2);
-      for (const u of more) { await humanPause(3000, 7000); const q = await runIn(await openBg(u), pageReadSite); if (q) out.push(`PAGE ${u} (title: ${q.title}):\n${q.text}`); }
+      for (const u of more) { await humanPause(/linkedin\.com/i.test(url) ? 3000 : 800, /linkedin\.com/i.test(url) ? 7000 : 2000); const q = await runIn(await openBg(u), pageReadSite); if (q) out.push(`PAGE ${u} (title: ${q.title}):\n${q.text}`); }
     }
-    await humanPause(3000, 7000);
+    await humanPause(/linkedin\.com/i.test(url) ? 3000 : 800, /linkedin\.com/i.test(url) ? 7000 : 2000);
   }
   return out.length ? out.join('\n\n') : 'No page could be opened (no link in the task and no website in the CRM).';
 }

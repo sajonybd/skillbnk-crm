@@ -13,7 +13,7 @@ async function openBg(url) {
   checkStop(); const key = tabKeyOf(url); liveNote(`${TAB_NAMES[key]} tab: opening ` + url.replace(/^https?:\/\//, '').slice(0, 60));
   const tab = await siteTab(key, url);
   await new Promise((res) => { const f = (id, info) => { if (id === tab.id && info.status === 'complete') { chrome.tabs.onUpdated.removeListener(f); res(); } }; chrome.tabs.onUpdated.addListener(f); setTimeout(res, 20000); });
-  await sleep(2500 + Math.random() * 2000); // let the page draw
+  await sleep(key === 'linkedin' ? 2500 + Math.random() * 2000 : 1200 + Math.random() * 900); // let the page draw
   return tab.id;
 }
 const runIn = async (tabId, func, args = []) => (await chrome.scripting.executeScript({ target: { tabId }, func, args }))[0]?.result;

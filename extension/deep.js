@@ -68,7 +68,7 @@ async function checkWebsite(lead) {
   if (!home) return { text: `WEBSITE: could not open ${url}.`, ok: false };
   const host = hostOf(url); const seen = new Set([url]); const pages = [{ url, ...home }];
   const next = home.links.filter((x) => hostOf(x.h) === host && PAGE_HINT.test(x.h + ' ' + x.t)).map((x) => x.h).filter((h) => !seen.has(h) && seen.add(h)).slice(0, 3);
-  for (const u of next) { await humanPause(3000, 8000); tabId = await openBg(u); const p = await runIn(tabId, pageReadSite); if (p) pages.push({ url: u, ...p }); }
+  for (const u of next) { await humanPause(800, 2000); tabId = await openBg(u); const p = await runIn(tabId, pageReadSite); if (p) pages.push({ url: u, ...p }); }
   const links = pages.flatMap((p) => p.links);
   const uniq = (xs) => [...new Map(xs.map((x) => [x.h, x])).values()];
   const book = uniq(links.filter((x) => /calendly\.com|cal\.com|savvycal|tidycal|zcal\.co|youcanbook|setmore|acuityscheduling|meetings\.hubspot|\/book(ing)?\b/i.test(x.h))).slice(0, 5);
@@ -87,7 +87,7 @@ async function checkLinkedIn(lead) {
   if (!p || p.signin) return { text: 'LINKEDIN: not checked (sign-in needed).', ok: false, signin: true };
   let out = `LINKEDIN PROFILE: connection ${p.degree || 'unknown'}${p.pending ? ', invite pending' : ''}.\n${p.top}`;
   // Last activity: tells us whether a pending or silent lead is even on LinkedIn.
-  await humanPause(3000, 8000);
+  await humanPause(1500, 4000);
   tabId = await openBg(`https://www.linkedin.com/in/${s}/recent-activity/all/`);
   const act = await runIn(tabId, pageReadActivity);
   let activity = 'not read';
@@ -95,7 +95,7 @@ async function checkLinkedIn(lead) {
   else if (act?.first) { const m = /^(\d+)\s?(h|d|w|mo|yr)$/.exec(act.first.replace(/\s/g, '')); const days = m ? Number(m[1]) * { h: 0, d: 1, w: 7, mo: 30, yr: 365 }[m[2]] : null; activity = `last activity about ${act.first} ago${days !== null && days > 60 ? ' (INACTIVE: nothing in the last 60 days)' : ''}`; }
   out += `\nLAST ACTIVITY: ${activity}.` + (act?.posts?.length ? '\nRecent posts:\n' + act.posts.map((x) => `- ${x.age || '?'}: ${x.text}`).join('\n') : '');
   if (p.degree !== '1st') return { text: out + '\nMessages: not connected, so no conversation to read.', ok: true, degree: p.degree, pending: p.pending, note: `connection ${p.degree || 'unknown'}` };
-  await humanPause(4000, 10000);
+  await humanPause(2000, 5000);
   tabId = await openBg('https://www.linkedin.com/messaging/');
   const name = `${lead.first_name} ${lead.last_name}`.trim();
   const t = await runIn(tabId, pageReadThread, [name, s]);
@@ -134,16 +134,21 @@ function situationOf(lead, l) {
 }
 
 // Order: LinkedIn status first (cheap, and it decides the next step), then website and webmail only if not checked recently.
-async function deepCheck(lead, say = log) {
-  const parts = []; const checked = []; const need = needsOf(lead);
-  let si = 0; const step = async (label, src, fn) => { liveAt(si++); say(`${lead.first_name} ${lead.last_name}: ${label}`); try { const r = await fn(lead); parts.push(r.text); if (r.ok) checked.push(src); return r; } catch (e) { parts.push(`${label}: not checked (${e.message}).`); return { ok: false }; } finally { await humanPause(2500, 7000); } };
-  const skip = (name, when) => { si++; const t = `${name}: not re-checked (last checked ${when ? String(when).slice(0, 10) : '?'}, nothing new flagged). The earlier research summary still applies.`; say(`${lead.first_name} ${lead.last_name}: ${name.toLowerCase()} skipped, checked recently`); parts.push(t); return { ok: false, skipped: true, text: t }; };
-  const l = await step('LinkedIn status first (accepted? pending? last activity)', 'linkedin', checkLinkedIn);
-  const w = need.website || !lead.website_checked_at ? await step('reading the website', 'website', checkWebsite) : skip('WEBSITE', lead.website_checked_at);
-  const m = need.mail ? await step('searching webmail', 'email', checkMail) : skip('EMAIL', lead.email_checked_at);
-  if (l.thread) checked.push('inbox');
+async function deepCheck(lead, say = log, quiet = false) {
+  const need = needsOf(lead); const nm = `${lead.first_name} ${lead.last_name}`;
+  // LinkedIn, the website and webmail each have their own tab, so they are read at the same time. Only LinkedIn keeps a human-like pause.
+  const step = async (label, src, fn, pause) => { say(`${nm}: ${label}`); try { const r = await fn(lead); return { ...r, src }; } catch (e) { return { ok: false, src, text: `${label}: not checked (${e.message}).` }; } finally { if (pause) await humanPause(pause[0], pause[1]); } };
+  const skip = async (name, src, when) => { const t = `${name}: not re-checked (last checked ${when ? String(when).slice(0, 10) : '?'}, nothing new flagged). The earlier research summary still applies.`; say(`${nm}: ${name.toLowerCase()} skipped, checked recently`); return { ok: false, skipped: true, src, text: t }; };
+  if (!quiet) liveAt(0);
+  const [l, w, m] = await Promise.all([
+    step('LinkedIn status first (accepted? pending? last activity)', 'linkedin', checkLinkedIn, [1500, 4000]),
+    need.website || !lead.website_checked_at ? step('reading the website', 'website', checkWebsite) : skip('WEBSITE', 'website', lead.website_checked_at),
+    need.mail ? step('searching webmail', 'email', checkMail) : skip('EMAIL', 'email', lead.email_checked_at),
+  ]);
+  if (!quiet) liveAt(2);
+  const checked = [l, w, m].filter((x) => x.ok).map((x) => x.src); if (l.thread) checked.push('inbox');
   await logWork(lead, { w, l, m });
-  return { text: `AUTO CHECK by the extension on ${today10()} (read-only):\n${situationOf(lead, l)}\n\n` + parts.join('\n\n'), checked, website: w, linkedin: l, mail: m };
+  return { text: `AUTO CHECK by the extension on ${today10()} (read-only):\n${situationOf(lead, l)}\n\n` + [l, w, m].map((x) => x.text).join('\n\n'), checked, website: w, linkedin: l, mail: m };
 }
 
 // Count the real work in the CRM so it shows in today's targets and the lead's history. The server keeps a profile visit to one per day.

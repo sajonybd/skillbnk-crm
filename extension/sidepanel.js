@@ -8,7 +8,9 @@ let stopRun = false, livePlanSteps = [], liveIdx = -1, workWin = null; const wor
 const TAB_NAMES = { chatgpt: 'ChatGPT', linkedin: 'LinkedIn', mail: 'Email', site: 'Website' };
 const tabKeyOf = (url) => /chatgpt\.com/i.test(url) ? 'chatgpt' : /linkedin\.com/i.test(url) ? 'linkedin' : /privateemail\.com|namecheap/i.test(url) ? 'mail' : 'site';
 // Four steady tabs (ChatGPT, LinkedIn, Email, Website) in ONE separate Chrome window. The window is opened without taking focus, so you can keep working in your own window.
-async function siteTab(key, url) {
+let tabLock = Promise.resolve(); // tab opens run one at a time so parallel reads never open two work windows
+function siteTab(key, url) { const run = tabLock.then(() => siteTabNow(key, url)); tabLock = run.catch(() => {}); return run; }
+async function siteTabNow(key, url) {
   let win = workWin ? await chrome.windows.get(workWin).catch(() => null) : null;
   let tab = workTabs[key] ? await chrome.tabs.get(workTabs[key]).catch(() => null) : null;
   if (tab && win && tab.windowId !== win.id) tab = null;
@@ -42,7 +44,7 @@ let manualResolve = null;
 setTimeout(() => { const rb = document.getElementById('live-read'); if (rb) rb.onclick = async () => { try { const r = await chrome.tabs.sendMessage(workTabs.chatgpt, { type: 'read' }); if (manualResolve) manualResolve(r); else liveNote('Nothing is waiting for an answer right now'); } catch (e) { liveNote('Could not read the ChatGPT tab: ' + e.message); } }; }, 0);
 setTimeout(() => { const b = document.getElementById('live-stop'); if (b) b.onclick = () => { stopRun = true; try { stop = true; } catch { /* batch not running */ } liveNote('Stopping after this step…'); }; }, 0);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-let cfg = { crm: 'https://skillbnk-crm.onrender.com', token: '', project: '', work: 'plan', owner: 'me', pause: 30, deep: true, setup: true };
+let cfg = { crm: 'https://skillbnk-crm.onrender.com', token: '', project: '', work: 'plan', owner: 'me', pause: 20, deep: true, setup: true };
 let setup = { text: '', version: '', at: 0 }; // the rulebook and its version code; refreshed every 10 minutes so a rules change is picked up
 async function getSetup() {
   if (!setup.text || Date.now() - setup.at > 600000) { const s = await crm('GET', '/api/leads/ai-setup'); setup = { text: s.prompt.replace(/Reply "Ready"[^\n]*/g, 'The first lead follows in this same message. Answer it now.'), version: s.version, at: Date.now() }; }
@@ -239,6 +241,21 @@ function extractJson(text) {
   return null;
 }
 
+// While ChatGPT is answering for one lead, the next lead's LinkedIn, website and webmail are already being read.
+let nextInBatch = null; const prefetching = {};
+function startPrefetch() {
+  const n = nextInBatch; if (!n || cfg.deep === false || deepInfo[n.id] || prefetching[n.id]) return Promise.resolve();
+  prefetching[n.id] = (async () => {
+    try {
+      if (!n.hydrated) { const full = (await crm('GET', `/api/leads/${n.id}`)).lead; Object.assign(n, full, { hydrated: true }); }
+      const d = await deepCheck(n, () => {}, true);
+      findings[n.id] = d.text + (findings[n.id] ? '\n' + findings[n.id] : '');
+      deepInfo[n.id] = { checked: d.checked, links: [...(d.website.book || []).map((x) => ({ kind: 'booking', url: x.h })), ...(d.website.contact || []).map((x) => ({ kind: 'contact', url: x.h }))] };
+    } catch { /* that lead's own run reads it again */ } finally { delete prefetching[n.id]; }
+  })();
+  return prefetching[n.id];
+}
+
 async function researchOne(lead) {
   if (busy) { log('Another lead is running', 'err'); return false; }
   busy = true; const box = $('work-area'); box.replaceChildren(el('div', { class: 'card' }, `Researching ${lead.first_name} ${lead.last_name}…`));
@@ -246,6 +263,7 @@ async function researchOne(lead) {
     if (!cfg.token || !cfg.project) throw new Error('Add the CRM API key and the ChatGPT project link in Settings first.');
     livePlan(`Researching ${lead.first_name} ${lead.last_name}`, ['LinkedIn status first: accepted or pending? last activity, conversation', 'Website (only if not read recently)', 'Webmail (only if not searched recently)', 'Ask ChatGPT (new or saved chat)', 'Read the answer, show the preview']);
     if (!lead.hydrated) { const full = (await crm('GET', `/api/leads/${lead.id}`)).lead; Object.assign(lead, full, { hydrated: true }); }
+    if (prefetching[lead.id]) { liveNote('This lead was already read while the last answer was coming in'); await prefetching[lead.id]; }
     if (cfg.deep !== false && !deepInfo[lead.id]) {
       const d = await deepCheck(lead);
       findings[lead.id] = d.text + (findings[lead.id] ? '\n' + findings[lead.id] : '');
@@ -271,7 +289,9 @@ async function researchOne(lead) {
     const tabId = await chatTab(chatUrl);
     $('live-read').style.display = '';
     const manual = new Promise((res) => { manualResolve = res; });
+    const pf = startPrefetch();
     const r = await Promise.race([chrome.tabs.sendMessage(tabId, { type: 'ask', prompt }), manual]); manualResolve = null; $('live-read').style.display = 'none';
+    await pf; // the next lead's reading finishes before the follow-through below uses the same tabs
     if (!r?.ok) throw new Error(r?.error || 'No answer from ChatGPT');
     if (r.url && /\/c\//.test(r.url)) { try { await crm('POST', `/api/leads/${lead.id}/links`, { url: r.url, kind: 'chatgpt', label: 'ChatGPT research' }); log('ChatGPT chat link saved on the lead', 'ok'); } catch (e) { if (!/already added/i.test(e.message)) log('Could not save the ChatGPT chat link: ' + e.message, 'err'); } } else log('ChatGPT answered, but its chat link was not visible, so it was not saved', 'err');
     liveAt(4, 'ChatGPT answered, reading the JSON block');
@@ -370,7 +390,9 @@ function quickLinks(lead, drafts) {
 async function runBatch() {
   stop = false;
   const total = leads.length; let i = 0, fails = 0;
-  for (const l of [...leads]) {
+  const list = [...leads];
+  for (let idx = 0; idx < list.length; idx++) {
+    const l = list[idx]; nextInBatch = list[idx + 1] || null;
     if (stop || stopRun) break;
     batchInfo = `Lead ${++i} of ${total}`;
     const ok = await researchOne(l);
@@ -385,9 +407,9 @@ async function runBatch() {
       if (stop) break;
     }
     $('live-stop').style.display = ''; // keep Stop available between leads
-    if (i < total) { log(`Waiting ${cfg.pause}s before the next lead`); liveNote(`Waiting ${cfg.pause}s before the next lead, like a person would`); await sleep(Math.max(5, Number(cfg.pause) || 30) * 1000 + Math.random() * 8000); }
+    if (i < total) { const w = Math.round(Math.max(4, (Number(cfg.pause) || 30) / 2)); log(`Waiting about ${w}s before the next lead`); liveNote(`Waiting about ${w}s before the next lead, like a person would`); await sleep(Math.max(4, (Number(cfg.pause) || 30) / 2) * 1000 + Math.random() * 4000); }
   }
-  batchInfo = ''; setStatus(''); log('Batch finished or stopped', 'ok'); if (typeof liveEnd === 'function') liveEnd(`Batch finished: ${i} of ${total} leads processed`);
+  nextInBatch = null; batchInfo = ''; setStatus(''); log('Batch finished or stopped', 'ok'); if (typeof liveEnd === 'function') liveEnd(`Batch finished: ${i} of ${total} leads processed`);
 }
 $('ver').textContent = 'v' + chrome.runtime.getManifest().version;
 loadCfg();
