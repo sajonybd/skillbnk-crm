@@ -86,23 +86,82 @@ function showFollow(box, lead, { res, d2 }) {
   box.replaceChildren(el('div', { class: 'ok' }, `Follow-up done: ${res.verdict}, ${res.drafts} new draft${res.drafts === 1 ? '' : 's'}. Nothing was sent.`), el('div', {}, 'Next: ' + (d2.next_action || '-')), ...quickLinks(lead, res.saved || []), d2.needs_human ? el('div', { class: 'muted' }, 'Check by hand: ' + d2.needs_human) : null);
 }
 
+// ── The next touch: after the research, do what the CRM says is the next step and save that draft ──
+// The CRM already decides the step (guide.kind). We only turn it into a draft the person can review and send later.
+const STEP_DRAFT = { warm: ['linkedin_comment'], nurture: ['linkedin_comment'], connect: ['linkedin_connect'], first_message: ['linkedin_dm'], followup: ['linkedin_followup'], last_followup: ['linkedin_followup'], reply: ['linkedin_followup', 'email'], email: ['email'], no_email: ['website_contact', 'linkedin_comment'] };
+const STEP_RULE = {
+  linkedin_connect: 'A connection note: 300 characters or fewer, one short line about them, NO offer, no signature.',
+  linkedin_dm: 'The first message to someone who does not know us: one fact about them and ONE easy question about how they work today. No product, no offer, no meeting ask.',
+  linkedin_followup: 'A follow-up or reply message in Shiblu\'s voice. If they wrote last, answer them first. If we wrote last, bring a NEW angle, never "just checking in". If they asked a question or showed interest, you may mention a free limited-time pilot and ask for a short call with two options in the Tuesday to Thursday after 3 PM Michigan window (a human confirms the calendar).',
+  email: 'A short email (50 to 90 words), subject line, one specific observation, one low-friction question.',
+  website_contact: 'A short message for their Contact Us form. Put the form page link in target_url.',
+  linkedin_comment: 'A comment with a real view on ONE recent post (not praise, not a summary), no name, no company, no signature. Put the direct post link in target_url.',
+};
+// Runs inside the lead's recent-activity page: the latest posts with their direct links.
+async function pageReadPosts() {
+  const w = (ms) => new Promise((r) => setTimeout(r, ms));
+  if (/\/(login|uas\/login|checkpoint|authwall)/i.test(location.href)) return { signin: true };
+  await w(2500); window.scrollBy(0, 900); await w(1500);
+  const seen = new Set();
+  const posts = [...document.querySelectorAll('[data-urn]')].map((p) => { const urn = p.getAttribute('data-urn') || ''; if (!/^urn:li:(activity|ugcPost|share)/.test(urn) || seen.has(urn)) return null; seen.add(urn); return { url: 'https://www.linkedin.com/feed/update/' + urn + '/', text: (p.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 600) }; }).filter((x) => x && x.text).slice(0, 3);
+  return { posts };
+}
+async function evidenceFor(lead, kind) {
+  const have = String(findings[lead.id] || '');
+  if (['warm', 'nurture'].includes(kind)) {
+    const slug = slugOf(lead.linkedin); if (!slug) return 'No LinkedIn profile link in the CRM, so no post could be read.';
+    const t = await runIn(await openBg(`https://www.linkedin.com/in/${slug}/recent-activity/all/`), pageReadPosts);
+    return t?.posts?.length ? 'RECENT POSTS (read-only; use one of these links as target_url):\n' + t.posts.map((x, i) => `${i + 1}. ${x.url}\n   ${x.text}`).join('\n') : `No recent posts could be read (${t?.signin ? 'sign-in needed' : 'none found'}).`;
+  }
+  if (['reply', 'followup', 'last_followup', 'first_message'].includes(kind)) {
+    if (/LINKEDIN CONVERSATION|EMAIL HISTORY/.test(have)) return have.slice(-5000);
+    if (kind === 'first_message' || !lead.linkedin) return have.slice(-3000) || 'No earlier conversation was read.';
+    return await readThread(lead, '');
+  }
+  if (['email', 'no_email'].includes(kind)) {
+    let mail = /EMAIL HISTORY|EMAIL:/.test(have) ? '' : (await checkMail(lead)).text;
+    const contact = (deepInfo[lead.id]?.links || []).filter((x) => x.kind === 'contact').map((x) => x.url).slice(0, 3);
+    return [have.slice(-3500), mail, contact.length ? 'Contact page links found: ' + contact.join(', ') : ''].filter(Boolean).join('\n\n');
+  }
+  return have.slice(-3000);
+}
+async function prepNext(lead, cur, r, box) {
+  const detail = await crm('GET', `/api/leads/${lead.id}`);
+  const g = detail.guide || {}; const kind = g.kind || '';
+  const verdict = String(cur.verdict || '').toUpperCase();
+  const allowed = (STEP_DRAFT[kind] || []).filter(() => verdict !== 'SKIP' && (verdict !== 'NURTURE' || ['warm', 'nurture'].includes(kind)));
+  if (!allowed.length) { box.replaceChildren(el('div', { class: 'muted' }, 'Next touch: ' + (g.action || 'nothing due today') + (g.why ? ' (' + g.why + ')' : '') + '. Nothing to draft now.')); return; }
+  const waiting = (detail.drafts || []).filter((x) => x.status === 'ready' && allowed.includes(x.channel));
+  if (waiting.length) { box.replaceChildren(el('div', { class: 'muted' }, `Next touch: ${g.action}. A draft is already waiting for your review.`)); return; }
+  box.replaceChildren(el('div', { class: 'muted' }, `Next touch: ${g.action}. Reading what is needed and preparing the draft…`));
+  const evidence = await evidenceFor(lead, kind);
+  const rules = allowed.map((c) => `- ${c}: ${STEP_RULE[c]}`).join('\n');
+  const prompt = `NEXT TOUCH for ${lead.first_name} ${lead.last_name}${lead.company ? ' (' + lead.company + ')' : ''}.\nThe CRM says the next step is: ${g.action}. Why: ${g.why || '-'}\nAllowed draft channel(s):\n${rules}\n\nEvidence the extension read (read-only):\n${evidence || '(none)'}\n\nWrite ONLY the draft for this step, in Shiblu's voice from the rulebook, one draft in the best allowed channel. Keep every other key of the json block as in your last answer. Never send, only draft. Answer in two lines, then the json block with the draft in "drafts".`;
+  const tabId = await chatTab(r.url && /\/c\//.test(r.url) ? r.url : cfg.project);
+  const a = await chrome.tabs.sendMessage(tabId, { type: 'ask', prompt });
+  if (!a?.ok) throw new Error(a?.error || 'No answer from ChatGPT');
+  const d2 = extractJson(a.text); const drafts = (d2?.drafts || []).filter((x) => allowed.includes(x.channel));
+  if (!drafts.length) throw new Error('ChatGPT gave no usable draft for this step. Next touch stays: ' + g.action);
+  const res = await crm('POST', `/api/leads/${lead.id}/ai-result`, followBody({ ...cur, needs_human: '', drafts, links: cur.links || [] }));
+  log(`Next touch ready for ${lead.first_name} ${lead.last_name}: ${drafts[0].channel} draft saved. Review it in the CRM, nothing was sent.`, 'ok');
+  box.replaceChildren(el('div', { class: 'ok' }, `Next touch drafted (${g.action}). Review and send it yourself.`), ...quickLinks(lead, res.saved || []));
+}
+
 // Called after a successful save. `box` is the place on the card where the result is shown.
 async function followThrough(lead, d, r, saveRes, box) {
+  if (cfg.followup === false) return;
   const verdict = String(saveRes.verdict || d.verdict || '').toUpperCase();
-  const kind = followKind(d, saveRes, verdict); if (!kind) return;
-  const task = String(d.needs_human || '');
+  const a = el('div'), b = el('div'); box.replaceChildren(a, b);
+  let cur = d; const task = String(d.needs_human || ''); const kind = followKind(d, saveRes, verdict);
+  const step = async () => { try { if (verdict !== 'SKIP') await prepNext(lead, cur, r, b); } catch (e) { b.replaceChildren(el('div', { class: 'err' }, 'Next touch not prepared: ' + e.message), el('button', { onclick: () => step() }, 'Try again')); log(e.message, 'err'); } };
   const run = async (k) => {
-    box.replaceChildren(el('div', { class: 'muted' }, k === 'thread' ? 'Reading the conversation (read-only)…' : k === 'page' ? 'Checking the page the research asked for…' : 'Asking ChatGPT for the missing draft…'));
+    a.replaceChildren(el('div', { class: 'muted' }, k === 'thread' ? 'Reading the conversation (read-only)…' : k === 'page' ? 'Checking the page the research asked for…' : 'Asking ChatGPT for the missing draft…'));
     try {
       if (!await allSites()) throw new Error('Permission to read websites was declined');
       const evidence = k === 'thread' ? await readThread(lead, task) : k === 'page' ? await readPublic(lead, task) : 'No new page was needed. Use the research you already did.';
-      showFollow(box, lead, await askAndSave(lead, d, r, task, evidence, k));
-    } catch (e) { box.replaceChildren(el('div', { class: 'err' }, 'Follow-up stopped: ' + e.message), el('button', { onclick: () => run(k) }, 'Try again')); log(e.message, 'err'); }
+      const out = await askAndSave(lead, d, r, task, evidence, k); cur = { ...d, ...out.d2 }; showFollow(a, lead, out);
+    } catch (e) { a.replaceChildren(el('div', { class: 'err' }, 'Follow-up stopped: ' + e.message), el('button', { onclick: () => run(k).then(step) }, 'Try again')); log(e.message, 'err'); }
   };
-  if (kind === 'thread') { // reads your signed-in LinkedIn inbox: you start it, one lead at a time
-    box.replaceChildren(el('div', { class: 'muted' }, 'Needs your inbox: ' + task), el('button', { class: 'primary', onclick: () => run('thread') }, 'Read the conversation and draft'));
-    return;
-  }
-  if (cfg.followup === false) { box.replaceChildren(el('div', { class: 'muted' }, 'Follow-up is off in Settings. ' + (task ? 'Check by hand: ' + task : 'No draft was written.')), el('button', { onclick: () => run(kind) }, 'Do the follow-up now')); return; }
-  await run(kind);
+  if (kind) await run(kind);
+  await step();
 }
