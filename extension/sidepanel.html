@@ -25,6 +25,10 @@
     <input id="pause" type="number" min="5" value="20" style="width:70px" title="Seconds to wait between leads"> <span class="muted">sec between leads</span></div>
   <div class="row"><label><input type="checkbox" id="setup" style="width:auto"> Put the master prompt (rulebook) at the start of every new chat</label></div>
   <div class="row"><label><input type="checkbox" id="hidedone" style="width:auto"> Hide leads that are not due yet or were already researched today</label></div>
+  <div class="muted" style="margin-top:6px"><b>Shiblu's availability</b> (used when a draft offers a call)</div>
+  <div class="row"><input id="calIcs" type="password" placeholder="Google Calendar private iCal address (skillbnkus), optional" style="flex:1" title="Google Calendar > Settings > the skillbnkus calendar > Integrate calendar > Secret address in iCal format. Read-only. Kept only in this browser."></div>
+  <textarea id="avail" rows="7" style="width:100%" title="Regular and open times in plain lines"></textarea>
+  <div class="row"><button id="availbtn">Show his next open times</button><span id="availout" class="muted"></span></div>
   <div class="row"><label><input type="checkbox" id="followup" style="width:auto"> After saving, do the follow-up: read the public page the research asked for and ask ChatGPT for a draft (nothing is ever sent)</label></div>
   <div class="row"><label><input type="checkbox" id="autosave" style="width:auto"> Save the ChatGPT result to the CRM automatically (nothing is ever sent)</label></div>
   <div class="row"><label><input type="checkbox" id="deep" style="width:auto"> Check website, LinkedIn, webmail before asking ChatGPT</label></div>
@@ -49,5 +53,6 @@
 <script src="sidepanel.js"></script>
 <script src="sweep.js"></script>
 <script src="deep.js"></script>
+<script src="calendar.js"></script>
 <script src="followup.js"></script>
 </body></html>

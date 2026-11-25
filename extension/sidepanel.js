@@ -123,10 +123,10 @@ async function resumePending() {
 async function loadCfg() {
   const s = await chrome.storage.local.get('cfg'); cfg = { ...cfg, ...(s.cfg || {}) };
   for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) $(k).value = cfg[k];
-  $('hidedone').checked = cfg.hideDone !== false; $('autosave').checked = cfg.autosave !== false; $('followup').checked = cfg.followup !== false; $('deep').checked = cfg.deep !== false; $('setup').checked = cfg.setup !== false;
+  $('calIcs').value = cfg.calIcs || ''; $('avail').value = cfg.avail || DEFAULT_AVAIL; $('hidedone').checked = cfg.hideDone !== false; $('autosave').checked = cfg.autosave !== false; $('followup').checked = cfg.followup !== false; $('deep').checked = cfg.deep !== false; $('setup').checked = cfg.setup !== false;
   if (!cfg.token || !cfg.project) $('settings').open = true; else { await syncNow(); refreshTargets(); await resumePending(); await renderDone(); try { appCfg = await crm('GET', '/api/config'); } catch { /* the preview then has no dropdown lists */ } $('load').click(); /* show the list right away */ }
 }
-$('save').onclick = async () => { for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) cfg[k] = $(k).value.trim(); cfg.hideDone = $('hidedone').checked; cfg.autosave = $('autosave').checked; cfg.followup = $('followup').checked; cfg.deep = $('deep').checked; cfg.setup = $('setup').checked; await chrome.storage.local.set({ cfg }); log('Settings saved', 'ok'); $('load').click(); };
+$('save').onclick = async () => { for (const k of ['crm', 'token', 'project', 'work', 'owner', 'pause']) cfg[k] = $(k).value.trim(); cfg.calIcs = $('calIcs').value.trim(); cfg.avail = $('avail').value; if (cfg.calIcs) { try { await chrome.permissions.request({ origins: [new URL(cfg.calIcs).origin + '/*'] }); } catch { /* shown when the calendar is read */ } } availCache = { at: 0, text: '' }; cfg.hideDone = $('hidedone').checked; cfg.autosave = $('autosave').checked; cfg.followup = $('followup').checked; cfg.deep = $('deep').checked; cfg.setup = $('setup').checked; await chrome.storage.local.set({ cfg }); log('Settings saved', 'ok'); $('load').click(); };
 
 $('load').onclick = async () => {
   try {
@@ -286,7 +286,7 @@ async function researchOne(lead) {
     if (chatLink) {
       // This lead already has its own chat: continue it and send only what is new.
       chatUrl = chatLink;
-      prompt = `UPDATE ${new Date().toISOString().slice(0, 10)}. New since the last check: ${detail.lead.needs_review || 'no change flagged, this is a manual re-check'}.\n\n${findings[lead.id] || '(no extra findings)'}\n\nRe-assess this lead from the earlier research plus this update. Any draft you write follows this writing standard:\n${WRITING}\n\n Answer in the same A to F format, but only say what changed. End with the same machine-readable json block as before, with research_summary updated.`;
+      prompt = `UPDATE ${new Date().toISOString().slice(0, 10)}. New since the last check: ${detail.lead.needs_review || 'no change flagged, this is a manual re-check'}.\n\n${findings[lead.id] || '(no extra findings)'}\n\nRe-assess this lead from the earlier research plus this update. Any draft you write follows this writing standard:\n${WRITING}\n\n${detail.lead.outreach_status === 'R' ? await availabilityBlock() + '\n\n' : ''} Answer in the same A to F format, but only say what changed. End with the same machine-readable json block as before, with research_summary updated.`;
       if (cfg.setup !== false) { const st = await getSetup(); if (detail.lead.rules_version !== st.version) { prompt = `RULES UPDATED. The rulebook below replaces every earlier version of the rules in this chat. Use only this one from now on.\n\n${st.text}\n\n=== END OF UPDATED RULEBOOK ===\n\n` + prompt; log('Rules changed since this chat last saw them: sending the updated rulebook with the update', 'ok'); } }
       log(`Continuing the saved ChatGPT chat for ${lead.first_name} ${lead.last_name} (only what is new)`);
     } else {
@@ -425,4 +425,5 @@ async function runBatch() {
 }
 $('ver').textContent = 'v' + chrome.runtime.getManifest().version;
 $('syncbtn').onclick = () => syncNow();
+$('availbtn').onclick = async () => { $('availout').textContent = 'Reading…'; try { const t = await availabilityBlock(true); $('availout').textContent = ''; log(t, 'ok'); $('availout').textContent = t.split('\n').slice(0, 3).join(' | ').slice(0, 220); } catch (e) { $('availout').textContent = e.message; } };
 loadCfg();
