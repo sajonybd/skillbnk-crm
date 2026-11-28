@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "skillBNK Research Assistant",
-  "version": "0.16.0",
+  "version": "0.17.3",
   "description": "Takes the next lead from the skillBNK CRM, asks ChatGPT in the skillBNK project, and saves the reviewed answer back to the CRM. Prepares drafts only; never sends.",
   "permissions": [
     "storage",
@@ -13,11 +13,13 @@
   ],
   "host_permissions": [
     "https://skillbnk-crm.onrender.com/*",
-    "https://chatgpt.com/*"
+    "https://chatgpt.com/*",
+    "https://privateemail.com/*",
+    "https://*.privateemail.com/*",
+    "https://www.linkedin.com/*"
   ],
   "optional_host_permissions": [
-    "<all_urls>",
-    "https://www.linkedin.com/*"
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"

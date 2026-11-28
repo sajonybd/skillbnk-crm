@@ -1,7 +1,7 @@
 # skillBNK Research Assistant (Chrome extension)
 
 Takes the next lead from the CRM, asks ChatGPT inside the skillBNK project, shows you the answer to review, and saves it to the CRM in one click.
-It prepares drafts only. It never sends a message, email or form, and it never clicks anything on LinkedIn.
+It prepares drafts. It never sends a message, email or form by itself. Since 0.17.0 there is one exception you control: the **Do it on LinkedIn** buttons (below) act on LinkedIn only when you press one for that lead.
 
 ## Install (once)
 1. Chrome > `chrome://extensions` > turn on **Developer mode** > **Load unpacked** > choose this `extension` folder.
@@ -25,3 +25,13 @@ Before asking ChatGPT, the extension reads: up to 4 pages of the lead's website 
 
 ## If something breaks
 ChatGPT changes its page now and then. If the message box or Send button is not found, only `chatgpt.js` needs a small fix.
+
+## Do it on LinkedIn (v0.17.0, you press each button)
+Open **Do it on LinkedIn** under any lead. Nothing runs by itself, every action is for that one lead, and the CRM is written to only when the LinkedIn page proves it happened.
+- **Fit check**: reads the profile and company page (read-only). Shows the degree, whether an invite is already pending, whether the profile shows Michigan, the role, the company size from LinkedIn and whether the size and authority rules say likely SKIP.
+- **Connect with note**: 1) **Check profile** (confirms Michigan and that no invite is pending or accepted). 2) Type one real fact and one curious question; the note is built as "Hi <first>, I'm Shiblu, a fellow Michigander and founder based in Warren. I saw <fact>. <question> Glad to connect." and checked live: 300 characters or fewer, one question, no offer or meeting words, no emoji, no dashes, no signature, and "fellow Michigander" only if the profile shows Michigan. 3) **Send invitation** asks you to confirm the exact text, sends it, then looks for it on the Sent invitations page. Only then it logs "linkedin_connect".
+- **Like latest post**: likes the lead's own post from the last month, only if it is not liked yet; logs "linkedin_like" after the page shows it is liked. Old posts are never liked.
+- **Follow**: follows from the profile top card; logs "linkedin_follow" after the page shows Following or the follower count rises. (LinkedIn already follows some profiles when an invite is sent.)
+- Daily safety limits: 25 invites, 60 likes, 40 follows. They are a brake, not a target.
+- If LinkedIn changes its page and a button stops working, nothing is logged and the panel says what it could not find. The page code is in `actions.js` (`pageActLike`, `pageActFollow`, `pageActInvite`, `pageActSentCheck`).
+- The rule checker has unit tests: `node --test test/actions.test.js`.
