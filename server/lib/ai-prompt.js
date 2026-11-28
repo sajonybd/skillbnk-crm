@@ -135,7 +135,7 @@ A PURSUE or QUALIFY lead must come back with at least one draft, or with needs_h
 
 // Setup text. The admin's saved Playbook text wins when it looks like the full rulebook; otherwise the built-in v8 copy is used.
 // Bump this text whenever the first-touch writing standard changes; the extension shows it so a person can see the server is current.
-export const WRITING_VERSION = 'v4 (28 Nov 2026: CEO email format, no sign-off in emails, Shiblu always in Bcc)';
+export const WRITING_VERSION = 'v7 (28 Nov 2026: how we found them in the body, founder curiosity at the end, 3-line closing, Shiblu always in Bcc)';
 
 export function buildSetup({ playbook }) {
   const custom = playbook && playbook.length > 6000 && /H1\b/.test(playbook);
