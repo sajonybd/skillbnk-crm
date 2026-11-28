@@ -4,17 +4,24 @@ const $ = (id) => document.getElementById(id);
 const el = (tag, attrs = {}, ...kids) => { const n = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'class') n.className = v; else if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else if (v !== null && v !== undefined && v !== false) n.setAttribute(k, v === true ? '' : v); } for (const c of kids.flat()) if (c !== null && c !== undefined && c !== false) n.append(c.nodeType ? c : document.createTextNode(String(c))); return n; };
 
 // ── Live panel: shows the plan, the step in progress and the page being opened, so you can see what the extension does ──
-let stopRun = false, livePlanSteps = [], liveIdx = -1, workWin = null; const workTabs = {}; // key -> tab id
+let stopRun = false, livePlanSteps = [], liveIdx = -1, workWin = null, chatWin = null; // ChatGPT gets its own window: a tab hidden behind another tab stops drawing and sending
+ const workTabs = {}; // key -> tab id
 const TAB_NAMES = { chatgpt: 'ChatGPT', linkedin: 'LinkedIn', mail: 'Email', site: 'Website' };
 const tabKeyOf = (url) => /chatgpt\.com/i.test(url) ? 'chatgpt' : /linkedin\.com/i.test(url) ? 'linkedin' : /privateemail\.com|namecheap/i.test(url) ? 'mail' : 'site';
 // Four steady tabs (ChatGPT, LinkedIn, Email, Website) in ONE separate Chrome window. The window is opened without taking focus, so you can keep working in your own window.
 let tabLock = Promise.resolve(); // tab opens run one at a time so parallel reads never open two work windows
 function siteTab(key, url) { const run = tabLock.then(() => siteTabNow(key, url)); tabLock = run.catch(() => {}); return run; }
 async function siteTabNow(key, url) {
-  let win = workWin ? await chrome.windows.get(workWin).catch(() => null) : null;
+  const isChat = key === 'chatgpt';
+  const wid = isChat ? chatWin : workWin;
+  let win = wid ? await chrome.windows.get(wid).catch(() => null) : null;
   let tab = workTabs[key] ? await chrome.tabs.get(workTabs[key]).catch(() => null) : null;
   if (tab && win && tab.windowId !== win.id) tab = null;
-  if (!win) { win = await chrome.windows.create({ url, focused: false, type: 'normal', width: 1100, height: 800 }); workWin = win.id; tab = win.tabs[0]; for (const k of Object.keys(workTabs)) delete workTabs[k]; }
+  if (!win) {
+    win = await chrome.windows.create({ url, focused: false, type: 'normal', width: 1100, height: 800 });
+    if (isChat) chatWin = win.id; else { workWin = win.id; for (const k of Object.keys(workTabs)) if (k !== 'chatgpt') delete workTabs[k]; }
+    tab = win.tabs[0];
+  }
   else if (tab) tab = await chrome.tabs.update(tab.id, { url, active: true });
   else tab = await chrome.tabs.create({ windowId: win.id, url, active: true });
   workTabs[key] = tab.id; liveTabs();
@@ -196,7 +203,7 @@ function logRow(lead) {
       log(`${lead.first_name} ${lead.last_name}: logged "${ACTION_LABELS[type]}"`, 'ok'); sel.value = ''; note.value = ''; btn.textContent = 'Logged ✓'; setTimeout(() => { btn.textContent = 'Log'; }, 2000); refreshTargets();
     } catch (e) { log(e.message, 'err'); }
   } }, 'Log');
-  return el('div', { class: 'row' }, sel, note, btn);
+  return el('div', {}, el('div', { class: 'row' }, sel, note, btn), typeof actionsRow === 'function' ? actionsRow(lead) : null);
 }
 
 async function allSites() {

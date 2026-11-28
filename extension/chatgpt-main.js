@@ -4,6 +4,8 @@
   try {
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    document.hasFocus = () => true; // the editor ignores typing and Send when it thinks the window has no focus
+    window.addEventListener('blur', (e) => e.stopImmediatePropagation(), true);
     document.addEventListener('visibilitychange', (e) => e.stopImmediatePropagation(), true);
   } catch { /* leave the page alone if it refuses */ }
 })();

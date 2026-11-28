@@ -462,6 +462,18 @@ export function leadsRoutes(db) {
       LEFT JOIN users us ON us.id = d.submitted_by LEFT JOIN users ur ON ur.id = d.reviewed_by LEFT JOIN users usn ON usn.id = d.sent_by`;
   // Review history of a draft (who submitted, approved, asked for changes, sent). Never deleted.
   const draftEvent = (draftId, user, action, note = '') => db.prepare('INSERT INTO draft_events(draft_id, user_id, action, note, created_at) VALUES (?,?,?,?,?)').run(draftId, user?.id ?? null, action, String(note || '').slice(0, 1000), new Date().toISOString());
+  // One-time steps: a lead only needs one connection note / DM / InMail / email draft at a time.
+  const ONE_TIME_CHANNELS = ['linkedin_connect', 'linkedin_dm', 'linkedin_inmail', 'email'];
+  // When the real action is logged (by hand, the extension or an API key), the waiting drafts for that step are now stale. Discard them.
+  function closeStaleDrafts(leadId, type, user, why) {
+    if (!ONE_TIME_CHANNELS.includes(type)) return 0;
+    const stale = db.prepare("SELECT id FROM drafts WHERE lead_id = ? AND channel = ? AND status = 'ready'").all(leadId, type);
+    for (const d of stale) {
+      db.prepare("UPDATE drafts SET status = 'discarded', updated_at = ? WHERE id = ?").run(new Date().toISOString(), d.id);
+      draftEvent(d.id, user, 'discarded', why);
+    }
+    return stale.length;
+  }
   const gateOn = () => (db.prepare("SELECT value FROM settings WHERE key = 'draft_gate'").get()?.value || 'on') !== 'off';
   const draftOne = (id) => db.prepare(`${DRAFT_SELECT} WHERE d.id = ?`).get(id);
   function cleanDraft(input, { partial }) {
@@ -542,6 +554,24 @@ export function leadsRoutes(db) {
     const cols = Object.keys(f);
     db.prepare(`UPDATE drafts SET ${cols.map((c) => c + ' = ?').join(', ')} WHERE id = ?`).run(...cols.map((c) => f[c]), d.id);
     res.json({ draft: draftOne(d.id) });
+  });
+  // Discard many waiting drafts at once: { ids: [..], reason: '...' }. Only drafts still waiting are touched; the rest are reported.
+  r.post('/drafts/bulk-discard', (req, res) => {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Number.isInteger).slice(0, 500) : [];
+    if (!ids.length) throw new HttpError(400, 'Send { ids: [draft ids] }');
+    const reason = String(req.body?.reason || 'Bulk discard').slice(0, 300);
+    const out = { discarded: 0, skipped: [] };
+    tx(db, () => {
+      for (const id of ids) {
+        const d = db.prepare('SELECT id, status FROM drafts WHERE id = ?').get(id);
+        if (!d) { out.skipped.push({ id, why: 'not found' }); continue; }
+        if (d.status !== 'ready') { out.skipped.push({ id, why: 'already ' + d.status }); continue; }
+        db.prepare("UPDATE drafts SET status = 'discarded', updated_at = ? WHERE id = ?").run(new Date().toISOString(), id);
+        draftEvent(id, req.user, 'discarded', reason);
+        out.discarded++;
+      }
+    });
+    res.json(out);
   });
   r.delete('/drafts/:did', (req, res) => {
     const d = db.prepare('SELECT * FROM drafts WHERE id = ?').get(Number(req.params.did));
@@ -760,6 +790,7 @@ export function leadsRoutes(db) {
   function recordActivity(lead, type, text, user) {
       if (isDuplicate(lead, type, text, user)) return false;
       logActivity(db, { lead_id: lead.id, user_id: user.id, type, note: text });
+      closeStaleDrafts(lead.id, type, user, 'Closed automatically: this step was logged as done');
       // Fill the outreach funnel dates the first time each step is logged.
       const today = todayLocal();
       const auto = { linkedin_connect: ['invite_sent_date', 'U', 'LinkedIn'], linkedin_connected: ['accepted_date'], linkedin_dm: ['first_dm_date'] }[type];
@@ -850,6 +881,12 @@ export function leadsRoutes(db) {
     if (dup) return { draft: draftOne(dup.id), duplicate: true };
     const now = new Date().toISOString();
     const id = tx(db, () => {
+      if (ONE_TIME_CHANNELS.includes(f.channel)) {
+        for (const o of db.prepare("SELECT id FROM drafts WHERE lead_id = ? AND channel = ? AND status = 'ready' AND review_status != 'approved'").all(lead.id, f.channel)) {
+          db.prepare("UPDATE drafts SET status = 'discarded', updated_at = ? WHERE id = ?").run(now, o.id);
+          draftEvent(o.id, user, 'discarded', 'Replaced by a newer draft');
+        }
+      }
       const ins = db.prepare('INSERT INTO drafts(lead_id, channel, subject, body, note, target_url, send_window, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
         .run(lead.id, f.channel, f.subject || '', f.body, f.note || '', f.target_url || '', f.send_window || DRAFT_SEND_WINDOW, 'ready', user.id, now, now);
       logActivity(db, { lead_id: lead.id, user_id: user.id, type: 'note', note: `Draft ready (${DRAFT_CHANNELS[f.channel]}), NOT sent: ${preview(f.body)}` });

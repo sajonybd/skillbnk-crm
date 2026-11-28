@@ -40,6 +40,10 @@ async function ask(prompt, timeoutMs = 420000) {
   box.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
   await sleep(700);
   if ((box.innerText || box.value || '').trim().length < Math.min(40, prompt.length)) document.execCommand('insertText', false, prompt);
+  if ((box.innerText || box.value || '').trim().length < Math.min(40, prompt.length)) { // window not focused: the editor accepts a beforeinput event without focus
+    try { const sel = getSelection(); const r = document.createRange(); r.selectNodeContents(box); sel.removeAllRanges(); sel.addRange(r); box.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: prompt, bubbles: true, cancelable: true })); } catch { /* next attempt below */ }
+    await sleep(500);
+  }
   // Sending: the long prompt in the box also makes the page text grow, so that cannot tell us the send worked.
   // "Sent" = the box emptied, or the Stop button appeared, or a new answer block appeared.
   const boxLen = () => (box.innerText || box.value || '').trim().length;
