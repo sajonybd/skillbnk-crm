@@ -886,3 +886,26 @@ test('website research: counted once per lead per day, a repeat is not counted a
   const acts = (await call('GET', `/api/leads/${lead.id}`)).activities;
   assert.equal(acts.filter((x) => x.type === 'website_research').length, 1);
 });
+
+test('drafts: logging the step closes stale drafts, a newer draft replaces an older one, bulk discard', async () => {
+  const made = await call('POST', '/api/leads', { first_name: 'Sam', last_name: 'Stale', company: 'StaleCo', email: 'sam@staleco.test' });
+  const id = (made.lead || made).id;
+  const a = await call('POST', `/api/leads/${id}/drafts`, { channel: 'linkedin_connect', body: 'Hi Sam, first note.' });
+  const b = await call('POST', `/api/leads/${id}/drafts`, { channel: 'linkedin_connect', body: 'Hi Sam, better note.' });
+  assert.equal(b.status, 201);
+  let list = await call('GET', '/api/leads/drafts?status=all');
+  assert.equal(list.rows.find((d) => d.id === a.draft.id).status, 'discarded');
+  assert.equal(list.rows.find((d) => d.id === b.draft.id).status, 'ready');
+  // Logging the real connection request closes the waiting draft.
+  await call('POST', `/api/leads/${id}/activities`, { type: 'linkedin_connect', note: 'Invite sent with note' });
+  list = await call('GET', '/api/leads/drafts?status=all');
+  assert.equal(list.rows.find((d) => d.id === b.draft.id).status, 'discarded');
+  // Comments are not one-time steps, so they stay.
+  const c = await call('POST', `/api/leads/${id}/drafts`, { channel: 'linkedin_comment', body: 'Nice post', target_url: 'https://www.linkedin.com/feed/update/urn:li:activity:1/' });
+  await call('POST', `/api/leads/${id}/activities`, { type: 'linkedin_comment', note: 'Nice post' });
+  list = await call('GET', '/api/leads/drafts?status=all');
+  assert.equal(list.rows.find((d) => d.id === c.draft.id).status, 'ready');
+  const bulk = await call('POST', '/api/leads/drafts/bulk-discard', { ids: [c.draft.id, b.draft.id, 99999999], reason: 'test' });
+  assert.equal(bulk.discarded, 1);
+  assert.equal(bulk.skipped.length, 2);
+});
